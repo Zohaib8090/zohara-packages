@@ -1,8 +1,27 @@
 {
   "store_name": "Zohara Packages",
-  "version": "1.0",
-  "featured": ["firefox", "vscodium", "lutris"],
+  "version": "1.1",
+  "featured": ["zohara-settings", "firefox", "vscodium", "lutris"],
   "apps": [
+    {
+      "id": "zohara-settings",
+      "name": "Zohara Settings",
+      "publisher": "Zohara OS Team",
+      "description": "System settings application for Zohara OS",
+      "category": "System",
+      "icon_url": "https://raw.githubusercontent.com/Zohaib8090/zohara-settings/main/data/icons/scalable/apps/zohara-settings.svg",
+      "type": "pacman",
+      "package": "zohara-settings",
+      "current_version": "0.1.0",
+      "versions": [
+        {
+          "version": "0.1.0",
+          "release_date": "2026-08-18",
+          "download_url": "https://github.com/Zohaib8090/zohara-settings/releases/download/v0.1.0/zohara-settings-0.1.0-1-x86_64.pkg.tar.zst",
+          "changelog": "Initial release with Network, Bluetooth, Display, Sound, and Power settings"
+        }
+      ]
+    },
     {
       "id": "firefox",
       "name": "Mozilla Firefox",
@@ -11,7 +30,16 @@
       "category": "App",
       "icon_url": "https://upload.wikimedia.org/wikipedia/commons/a/a0/Firefox_logo%2C_2019.svg",
       "type": "pacman",
-      "package": "firefox"
+      "package": "firefox",
+      "current_version": "latest",
+      "versions": [
+        {
+          "version": "latest",
+          "release_date": "2026-08-18",
+          "download_url": "",
+          "changelog": "Standard repository version"
+        }
+      ]
     },
     {
       "id": "vscodium",
@@ -21,7 +49,16 @@
       "category": "App",
       "icon_url": "https://upload.wikimedia.org/wikipedia/commons/6/60/VSCodium_logo.svg",
       "type": "flatpak",
-      "package": "com.vscodium.codium"
+      "package": "com.vscodium.codium",
+      "current_version": "latest",
+      "versions": [
+        {
+          "version": "latest",
+          "release_date": "2026-08-18",
+          "download_url": "",
+          "changelog": "Flatpak release"
+        }
+      ]
     },
     {
       "id": "spotify",
@@ -31,7 +68,16 @@
       "category": "App",
       "icon_url": "https://upload.wikimedia.org/wikipedia/commons/2/26/Spotify_logo_with_text.svg",
       "type": "flatpak",
-      "package": "com.spotify.Client"
+      "package": "com.spotify.Client",
+      "current_version": "latest",
+      "versions": [
+        {
+          "version": "latest",
+          "release_date": "2026-08-18",
+          "download_url": "",
+          "changelog": "Flatpak release"
+        }
+      ]
     },
     {
       "id": "discord",
@@ -41,7 +87,16 @@
       "category": "App",
       "icon_url": "https://upload.wikimedia.org/wikipedia/commons/9/98/Discord_logo.svg",
       "type": "flatpak",
-      "package": "com.discordapp.Discord"
+      "package": "com.discordapp.Discord",
+      "current_version": "latest",
+      "versions": [
+        {
+          "version": "latest",
+          "release_date": "2026-08-18",
+          "download_url": "",
+          "changelog": "Flatpak release"
+        }
+      ]
     },
     {
       "id": "lutris",
@@ -51,7 +106,16 @@
       "category": "Game",
       "icon_url": "https://upload.wikimedia.org/wikipedia/commons/9/93/Lutris_logo.png",
       "type": "pacman",
-      "package": "lutris"
+      "package": "lutris",
+      "current_version": "latest",
+      "versions": [
+        {
+          "version": "latest",
+          "release_date": "2026-08-18",
+          "download_url": "",
+          "changelog": "Standard repository version"
+        }
+      ]
     },
     {
       "id": "supertuxkart",
@@ -61,7 +125,16 @@
       "category": "Game",
       "icon_url": "https://upload.wikimedia.org/wikipedia/commons/a/a1/Supertuxkart_logo.png",
       "type": "pacman",
-      "package": "supertuxkart"
+      "package": "supertuxkart",
+      "current_version": "latest",
+      "versions": [
+        {
+          "version": "latest",
+          "release_date": "2026-08-18",
+          "download_url": "",
+          "changelog": "Standard repository version"
+        }
+      ]
     },
     {
       "id": "heroic",
@@ -71,7 +144,16 @@
       "category": "Game",
       "icon_url": "https://upload.wikimedia.org/wikipedia/commons/6/64/Heroic_Games_Launcher_Icon.png",
       "type": "flatpak",
-      "package": "com.heroicgameslauncher.hgl"
+      "package": "com.heroicgameslauncher.hgl",
+      "current_version": "latest",
+      "versions": [
+        {
+          "version": "latest",
+          "release_date": "2026-08-18",
+          "download_url": "",
+          "changelog": "Flatpak release"
+        }
+      ]
     }
   ]
 }
