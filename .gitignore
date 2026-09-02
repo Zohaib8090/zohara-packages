@@ -1,0 +1,7 @@
+# Build artifacts and the live zohara.db are uploaded to the
+# `stable`, `channel-beta`, `channel-alpha` releases. Don't commit them.
+zohara.db
+zohara.db.tar.gz
+zohara.db.sig
+*.pkg.tar.zst
+*.pkg.tar
