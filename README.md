@@ -52,27 +52,7 @@ refreshes the package database.
   with the artifact URL, merges it into the channel's `zohara.db`, and
   uploads both back to the channel release.
 
-## Security
-
-This repo's packages are **unsigned** (`SigLevel = Optional TrustAll`).
-That's fine for our own packages (we wrote them), but never point a
-production system at this repo for third-party software.
-
 ## Adding a new package
 
-1. Make the source repo emit a `repository_dispatch` event on release:
-   ```yaml
-   - uses: peter-evans/repository-dispatch@v3
-     with:
-       token: ${{ secrets.PACKAGES_DISPATCH_TOKEN }}
-       repository: Zohaib8090/zohara-packages
-       event-type: package-published
-       client-payload: |
-         {
-           "package_name": "zohara-foo",
-           "version": "1.2.3",
-           "artifact_url": "https://github.com/.../zohara-foo-1.2.3-1-x86_64.pkg.tar.zst",
-           "channel": "stable"
-         }
-   ```
+1. Make the source repo emit a `repository_dispatch` event on release.
 2. That's it. The `publish.yml` workflow handles everything else.
