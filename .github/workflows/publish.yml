@@ -47,7 +47,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install build tools
-        run: sudo apt-get update && sudo apt-get install -y curl xz zstd
+        run: sudo apt-get update && sudo apt-get install -y curl xz-utils zstd file
 
       - name: Determine release tag and URL
         id: release_info
@@ -124,19 +124,24 @@ jobs:
           ls -la
 
       - name: Run repo-add to merge the new package
+        env:
+          # Tell repo-add to use the .zst algorithm explicitly. Newer
+          # versions of pacman default to zstd-compressed package dbs,
+          # but repo-add on Ubuntu may default to gz without a flag.
+          REPOADD_OPTS: "--new --remove"
         run: |
           PKG="${{ steps.inputs.outputs.package }}"
           # repo-add creates zohara.db and zohara.db.tar.gz (the latter is
           # a tar archive of the former, used by older pacman versions).
           # Both are uploaded.
-          repo-add zohara.db.tar.gz package.pkg.tar.zst
+          repo-add $REPOADD_OPTS zohara.db.tar.gz package.pkg.tar.zst
           # Some repo-add versions need this rename after the fact
           [ -f zohara.db ]      || cp zohara.db.tar.gz zohara.db
           [ -f zohara.db.sig ]  || true
           ls -la
           # Verify the package made it in
           echo "--- contents of zohara.db ---"
-          tar -tf zohara.db
+          tar -tf zohara.db | head -20
 
       - name: Upload updated zohara.db and the new package to the release
         env:
