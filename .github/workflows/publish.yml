@@ -103,14 +103,24 @@ jobs:
           TAG: ${{ steps.release_info.outputs.tag }}
           CHANNEL: ${{ steps.release_info.outputs.channel }}
         run: |
-          # See if the channel's release already exists
-          REL_ID=$(gh release view "$TAG" --json id -q '.id' 2>/dev/null || true)
+          # See if the channel's release already exists. Use --repo so
+          # `gh` operates on the target repo even when our cwd is not
+          # a git checkout of it (which is the case in this container).
+          REL_ID=$(gh release view "$TAG" --repo "$PACKAGES_REPO" --json id -q '.id' 2>/dev/null || true)
           if [ -z "$REL_ID" ]; then
-            echo "Creating release for channel $CHANNEL at tag $TAG"
-            gh release create "$TAG" \
+            echo "Creating release for channel $CHANNEL at tag $TAG in $PACKAGES_REPO"
+            # `gh release create` requires either a git repo cwd or --repo.
+            # We're in a fresh container, so use --repo explicitly.
+            PRE=$([ "$CHANNEL" != "stable" ] && echo "--prerelease" || echo "")
+            if gh release create "$TAG" \
+              --repo "$PACKAGES_REPO" \
               --title "Zohara Packages — $CHANNEL" \
-              --notes "Auto-managed Arch package repository for the $CHANNEL channel. Files in this release are the source of truth for \`pacman -Syu\` on Zohara OS systems configured for this channel." \
-              --prerelease=$([ "$CHANNEL" != "stable" ] && echo true || echo false)
+              --notes "Auto-managed Arch package repository for the **$CHANNEL** channel. Files here are the source of truth for \`pacman -Syu\` on Zohara OS systems on this channel." \
+              $PRE; then
+              echo "Created $TAG"
+            else
+              echo "::warning::Could not create the channel release in $PACKAGES_REPO."
+            fi
           else
             echo "Channel release $TAG already exists (id=$REL_ID)"
           fi
@@ -122,7 +132,7 @@ jobs:
         run: |
           # repo-add needs the existing db to merge into. If the release has no
           # db yet, just create a fresh one.
-          if gh release download "$TAG" --pattern 'zohara.db' --dir . 2>/dev/null; then
+          if gh release download "$TAG" --repo "$PACKAGES_REPO" --pattern 'zohara.db' --dir . 2>/dev/null; then
             echo "Downloaded existing zohara.db"
           else
             echo "No existing zohara.db; repo-add will create one"
@@ -160,10 +170,10 @@ jobs:
           # The package filename we have on disk is the original name
           # (e.g. zohara-settings-0.2.0-1-x86_64.pkg.tar.zst); upload under
           # the same name so direct download URLs stay stable.
-          gh release upload "$TAG" package.pkg.tar.zst --clobber
+          gh release upload "$TAG" package.pkg.tar.zst --repo "$PACKAGES_REPO" --clobber
 
           # Then the db files (always clobber; the previous version is obsolete)
-          gh release upload "$TAG" zohara.db zohara.db.tar.gz --clobber
+          gh release upload "$TAG" zohara.db zohara.db.tar.gz --repo "$PACKAGES_REPO" --clobber
 
           echo "::notice::Release $TAG now contains the new $PKG $VER"
 
