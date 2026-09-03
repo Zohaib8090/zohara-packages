@@ -53,7 +53,7 @@ jobs:
       - name: Install build tools
         run: |
           pacman -Syu --noconfirm
-          pacman -S --noconfirm --needed github-cli
+          pacman -S --noconfirm --needed github-cli git base-devel
 
       - name: Determine release tag and URL
         id: release_info
