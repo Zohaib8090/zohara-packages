@@ -39,7 +39,11 @@ on:
 
 jobs:
   publish:
+    # Run inside an Arch container so `repo-add` (and the .zst algorithm)
+    # is available natively -- no need to install pacman-tools on Ubuntu.
     runs-on: ubuntu-latest
+    container:
+      image: archlinux:latest
     permissions:
       contents: write   # to create / update the release
     steps:
@@ -47,7 +51,9 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install build tools
-        run: sudo apt-get update && sudo apt-get install -y curl xz-utils zstd file
+        run: |
+          pacman -Syu --noconfirm
+          pacman -S --noconfirm --needed github-cli
 
       - name: Determine release tag and URL
         id: release_info
