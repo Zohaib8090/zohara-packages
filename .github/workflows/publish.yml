@@ -59,7 +59,10 @@ jobs:
           pacman-key --init
           pacman-key --populate archlinux
           pacman -Syu --noconfirm
-          pacman -S --noconfirm --needed github-cli git base-devel
+          # zstd is needed so bsdtar (used by repo-add) can read .zst
+          # package archives. Without it, repo-add reports
+          # "is not a package file" because it can't open the tarball.
+          pacman -S --noconfirm --needed github-cli git base-devel zstd
 
       - name: Determine release tag and URL
         id: release_info
