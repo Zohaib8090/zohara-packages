@@ -1,18 +1,5 @@
 name: Publish Zohara Package
 
-# This workflow is triggered by other repos (zohara-settings, zohara-store, ...)
-# via repository_dispatch events. When a release-worthy build finishes in the
-# source repo, it sends a webhook payload with the artifact URL, channel, and
-# version. This workflow:
-#
-#   1. Downloads the .pkg.tar.zst
-#   2. Runs `repo-add` to merge it into the channel's zohara.db
-#   3. Re-uploads zohara.db and zohara.db.tar.gz to the channel release
-#   4. Patches apps.json to add / update the package entry
-#   5. Commits apps.json back to the repo
-#
-# Channels: stable (default), beta, alpha. Each has its own release.
-
 on:
   repository_dispatch:
     types: [package-published]
@@ -39,209 +26,166 @@ on:
 
 jobs:
   publish:
-    # Run inside an Arch container so `repo-add` (and the .zst algorithm)
-    # is available natively -- no need to install pacman-tools on Ubuntu.
     runs-on: ubuntu-latest
     container:
       image: archlinux:latest
     permissions:
-      contents: write   # to create / update the release
+      contents: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Install build tools
         run: |
-          # The archlinux:latest container ships without an initialized
-          # pacman keyring. Initialize it before installing anything
-          # (otherwise pacman -S fails with "command failed to execute
-          # correctly" on keyring signatures).
           pacman-key --init
           pacman-key --populate archlinux
           pacman -Syu --noconfirm
-          # zstd is needed so bsdtar (used by repo-add) can read .zst
-          # package archives. Without it, repo-add reports
-          # "is not a package file" because it can't open the tarball.
-          pacman -S --noconfirm --needed github-cli git base-devel zstd
-
-      - name: Determine release tag and URL
-        id: release_info
-        run: |
-          CHANNEL="${{ github.event.inputs.channel || 'stable' }}"
-          if [ "$CHANNEL" = "stable" ]; then
-            TAG="stable"
-          else
-            TAG="channel-$CHANNEL"
-          fi
-          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-          echo "channel=$CHANNEL" >> "$GITHUB_OUTPUT"
+          pacman -S --noconfirm --needed github-cli git base-devel zstd curl
 
       - name: Resolve inputs
         id: inputs
         run: |
-          # Inputs can come from either workflow_dispatch or repository_dispatch
           if [ "${{ github.event_name }}" = "repository_dispatch" ]; then
             PKG="${{ github.event.client_payload.package_name }}"
             VER="${{ github.event.client_payload.version }}"
-            URL="${{ github.event.client_payload.artifact_url }}"
+            RUN_ID="${{ github.event.client_payload.run_id }}"
             CH="${{ github.event.client_payload.channel || 'stable' }}"
+            SRC_REPO="${{ github.event.client_payload.source_repo }}"
           else
             PKG="${{ github.event.inputs.package_name }}"
             VER="${{ github.event.inputs.version }}"
-            URL="${{ github.event.inputs.artifact_url }}"
+            RUN_ID=""
             CH="${{ github.event.inputs.channel }}"
+            SRC_REPO="Zohaib8090/zohara-settings"
           fi
           echo "package=$PKG" >> "$GITHUB_OUTPUT"
           echo "version=$VER" >> "$GITHUB_OUTPUT"
-          echo "url=$URL" >> "$GITHUB_OUTPUT"
           echo "channel=$CH" >> "$GITHUB_OUTPUT"
-          echo "::notice::Publishing $PKG $VER to channel $CH from $URL"
+          echo "run_id=$RUN_ID" >> "$GITHUB_OUTPUT"
+          echo "source_repo=$SRC_REPO" >> "$GITHUB_OUTPUT"
+          echo "::notice::Publishing $PKG $VER to channel $CH"
 
-      - name: Download the .pkg.tar.zst
-        env:
-          URL: ${{ steps.inputs.outputs.url }}
+      - name: Determine release tag
+        id: release_info
         run: |
-          curl -L -o package.pkg.tar.zst "$URL"
+          CH="${{ steps.inputs.outputs.channel }}"
+          if [ "$CH" = "stable" ]; then
+            TAG="stable"
+          else
+            TAG="channel-$CH"
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Download the .pkg.tar.zst from artifact
+        env:
+          RUN_ID: ${{ steps.inputs.outputs.run_id }}
+          SRC_REPO: ${{ steps.inputs.outputs.source_repo }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ -z "$RUN_ID" ]; then
+            echo "::error::No run_id provided, cannot download artifact"
+            exit 1
+          fi
+
+          echo "Downloading artifact from run $RUN_ID in $SRC_REPO..."
+
+          # Download all artifacts from the run
+          gh run download "$RUN_ID" \
+            --repo "$SRC_REPO" \
+            --dir /tmp || {
+            echo "::error::Failed to download artifacts from run $RUN_ID"
+            exit 1
+          }
+
+          # Find the .pkg.tar.zst file
+          PKG_FILE=$(find /tmp -name "*.pkg.tar.zst" -type f | head -1)
+
+          if [ -z "$PKG_FILE" ]; then
+            echo "::error::No .pkg.tar.zst found in downloaded artifacts"
+            ls -la /tmp
+            exit 1
+          fi
+
+          echo "✓ Found package: $PKG_FILE"
+          cp "$PKG_FILE" package.pkg.tar.zst
+
+          # Validate file
+          FILE_SIZE=$(stat -c%s package.pkg.tar.zst 2>/dev/null || stat -f%z package.pkg.tar.zst)
+          if [ "$FILE_SIZE" -lt 1000 ]; then
+            echo "::error::Package file too small ($FILE_SIZE bytes)"
+            exit 1
+          fi
+
+          echo "✓ Downloaded package ($FILE_SIZE bytes)"
           ls -lh package.pkg.tar.zst
-          # Sanity check: it must be a valid Arch package
           tar -tf package.pkg.tar.zst | head -10
 
       - name: Get or create channel release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ steps.release_info.outputs.tag }}
-          CHANNEL: ${{ steps.release_info.outputs.channel }}
+          CHANNEL: ${{ steps.inputs.outputs.channel }}
         run: |
-          # See if the channel's release already exists. Use --repo so
-          # `gh` operates on the target repo even when our cwd is not
-          # a git checkout of it (which is the case in this container).
-          REL_ID=$(gh release view "$TAG" --repo "$PACKAGES_REPO" --json id -q '.id' 2>/dev/null || true)
+          REL_ID=$(gh release view "$TAG" --json id -q '.id' 2>/dev/null || true)
           if [ -z "$REL_ID" ]; then
-            echo "Creating release for channel $CHANNEL at tag $TAG in $PACKAGES_REPO"
-            # `gh release create` requires either a git repo cwd or --repo.
-            # We're in a fresh container, so use --repo explicitly.
             PRE=$([ "$CHANNEL" != "stable" ] && echo "--prerelease" || echo "")
-            if gh release create "$TAG" \
-              --repo "$PACKAGES_REPO" \
+            gh release create "$TAG" \
               --title "Zohara Packages — $CHANNEL" \
-              --notes "Auto-managed Arch package repository for the **$CHANNEL** channel. Files here are the source of truth for \`pacman -Syu\` on Zohara OS systems on this channel." \
-              $PRE; then
-              echo "Created $TAG"
-            else
-              echo "::warning::Could not create the channel release in $PACKAGES_REPO."
-            fi
+              --notes "Auto-managed Arch package repository for the **$CHANNEL** channel." \
+              $PRE
+            echo "✓ Created release $TAG"
           else
-            echo "Channel release $TAG already exists (id=$REL_ID)"
+            echo "✓ Release $TAG already exists"
           fi
 
-      - name: Download current zohara.db from the release (if present)
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const tag = '${{ steps.release_info.outputs.tag }}';
-            try {
-              const asset = await github.rest.repos.getReleaseAssetByName
-                ? null
-                : null;
-              // The endpoint to fetch an asset by name doesn't exist directly,
-              // so list the release's assets and find the one we want.
-              const release = await github.rest.repos.getReleaseByTag({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                tag,
-              });
-              const dbAsset = release.data.assets.find(a => a.name === 'zohara.db');
-              if (!dbAsset) {
-                core.notice('No existing zohara.db; repo-add will create one');
-                return;
-              }
-              const fs = require('fs');
-              const res = await github.request('GET', dbAsset.url, {
-                headers: { Accept: 'application/octet-stream' },
-                responseType: 'arraybuffer',
-              });
-              fs.writeFileSync('zohara.db', Buffer.from(res.data));
-              core.info(`Downloaded existing zohara.db (${fs.statSync('zohara.db').size} bytes)`);
-            } catch (e) {
-              core.notice(`Could not download existing zohara.db: ${e.message}`);
-            }
+      - name: Download current zohara.db from the release
+        env:
+          TAG: ${{ steps.release_info.outputs.tag }}
+        run: |
+          if gh release download "$TAG" --pattern 'zohara.db' --dir . 2>/dev/null; then
+            echo "✓ Downloaded existing zohara.db"
+          else
+            echo "ℹ No existing zohara.db; repo-add will create one"
+          fi
 
       - name: Run repo-add to merge the new package
-        env:
-          # Tell repo-add to use the .zst algorithm explicitly. Newer
-          # versions of pacman default to zstd-compressed package dbs,
-          # but repo-add on Ubuntu may default to gz without a flag.
-          REPOADD_OPTS: "--new --remove"
         run: |
-          PKG="${{ steps.inputs.outputs.package }}"
-          # repo-add creates zohara.db and zohara.db.tar.gz (the latter is
-          # a tar archive of the former, used by older pacman versions).
-          # Both are uploaded.
-          repo-add $REPOADD_OPTS zohara.db.tar.gz package.pkg.tar.zst
-          # Some repo-add versions need this rename after the fact
-          [ -f zohara.db ]      || cp zohara.db.tar.gz zohara.db
-          [ -f zohara.db.sig ]  || true
-          ls -la
-          # Verify the package made it in
-          echo "--- contents of zohara.db ---"
+          repo-add --new --remove zohara.db.tar.gz package.pkg.tar.zst
+          [ -f zohara.db ] || cp zohara.db.tar.gz zohara.db
+          [ -f zohara.db.sig ] || true
+          echo "✓ repo-add completed"
+          echo "--- Package database contents ---"
           tar -tf zohara.db | head -20
 
-      - name: Upload updated zohara.db and the new package to the release
-        uses: actions/github-script@v7
-        with:
-          script: |
-            // Use the workflow's GITHUB_TOKEN (this workflow runs in
-            // its own repo, so the default token has write access).
-            // We avoid the `gh release upload` CLI here because it
-            // wants to be inside a git checkout of the target repo;
-            // uploading via the REST API sidesteps that.
-            const fs = require('fs');
-            const owner = context.repo.owner;
-            const repo = context.repo.repo;
-            const tag = '${{ steps.release_info.outputs.tag }}';
-
-            const files = [
-              { path: 'package.pkg.tar.zst', label: 'package' },
-              { path: 'zohara.db',           label: 'db-flat' },
-              { path: 'zohara.db.tar.gz',    label: 'db-archive' },
-            ];
-
-            for (const { path, label } of files) {
-              if (!fs.existsSync(path)) {
-                core.warning(`skipping ${path}: not found`);
-                continue;
-              }
-              const content = fs.readFileSync(path);
-              const content_b64 = content.toString('base64');
-              const name = path; // upload under the on-disk filename
-              console.log(`Uploading ${name} (${content.length} bytes) to ${owner}/${repo}@${tag}`);
-              await github.rest.repos.uploadReleaseAsset({
-                owner, repo, release_id: (
-                  await github.rest.repos.getReleaseByTag({ owner, repo, tag })
-                ).data.id,
-                name,
-                data: content_b64,
-              });
-            }
-            core.info('All assets uploaded.');
+      - name: Upload updated files to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.release_info.outputs.tag }}
+        run: |
+          gh release upload "$TAG" \
+            package.pkg.tar.zst \
+            zohara.db \
+            zohara.db.tar.gz \
+            --clobber
+          echo "✓ Uploaded package and database to release"
 
       - name: Patch apps.json with the new package version
         env:
           PKG: ${{ steps.inputs.outputs.package }}
           VER: ${{ steps.inputs.outputs.version }}
         run: |
-          python3 - <<EOF
-          import json, os, datetime
+          python3 - <<'PYEOF'
+          import json, datetime
           pkg = "$PKG"
           ver = "$VER"
           today = datetime.date.today().isoformat()
-          apps_path = "apps.json"
-          with open(apps_path) as f:
+
+          with open("apps.json") as f:
               data = json.load(f)
-          # Find or create the entry for this package
+
           entry = next((a for a in data["apps"] if a["id"] == pkg or a.get("package") == pkg), None)
+
           if entry is None:
-              # New entry
               entry = {
                   "id": pkg,
                   "name": pkg.replace("-", " ").title(),
@@ -255,40 +199,39 @@ jobs:
                   "versions": [{
                       "version": ver,
                       "release_date": today,
-                      "download_url": f"https://github.com/Zohaib8090/zohara-packages/releases/latest/download/{pkg}-{ver}-x86_64.pkg.tar.zst",
+                      "download_url": f"https://github.com/Zohaib8090/zohara-packages/releases/download/stable/{pkg}-{ver}-1-x86_64.pkg.tar.zst",
                       "changelog": f"Auto-published from {pkg} v{ver}"
                   }]
               }
               data["apps"].append(entry)
           else:
-              # Update existing entry
               entry["current_version"] = ver
-              # Add to versions list, keep history
               ver_entry = next((v for v in entry["versions"] if v["version"] == ver), None)
               if ver_entry is None:
                   entry["versions"].insert(0, {
                       "version": ver,
                       "release_date": today,
-                      "download_url": f"https://github.com/Zohaib8090/zohara-packages/releases/latest/download/{pkg}-{ver}-x86_64.pkg.tar.zst",
+                      "download_url": f"https://github.com/Zohaib8090/zohara-packages/releases/download/stable/{pkg}-{ver}-1-x86_64.pkg.tar.zst",
                       "changelog": f"Auto-published from {pkg} v{ver}"
                   })
-                  # Trim history to last 10 versions
                   entry["versions"] = entry["versions"][:10]
               else:
                   ver_entry["release_date"] = today
-          with open(apps_path, "w") as f:
-              json.dump(data, f, indent=2)
-          print(f"Updated apps.json: {pkg} -> {ver}")
-          EOF
 
-      - name: Commit apps.json back to the repo
+          with open("apps.json", "w") as f:
+              json.dump(data, f, indent=2)
+          print(f"✓ Updated apps.json: {pkg} -> {ver}")
+          PYEOF
+
+      - name: Commit and push apps.json
         run: |
           git config user.name "Zohara Packages Bot"
           git config user.email "packages-bot@zohara.local"
           git add apps.json
           if git diff --cached --quiet; then
-            echo "No apps.json changes to commit"
+            echo "ℹ No apps.json changes"
           else
             git commit -m "apps: bump ${{ steps.inputs.outputs.package }} to ${{ steps.inputs.outputs.version }}"
             git push origin main
+            echo "✓ Pushed apps.json"
           fi
