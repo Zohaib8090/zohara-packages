@@ -52,6 +52,12 @@ jobs:
 
       - name: Install build tools
         run: |
+          # The archlinux:latest container ships without an initialized
+          # pacman keyring. Initialize it before installing anything
+          # (otherwise pacman -S fails with "command failed to execute
+          # correctly" on keyring signatures).
+          pacman-key --init
+          pacman-key --populate archlinux
           pacman -Syu --noconfirm
           pacman -S --noconfirm --needed github-cli git base-devel
 
