@@ -77,6 +77,7 @@ jobs:
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
       - name: Download the .pkg.tar.zst from artifact
+        id: download
         env:
           RUN_ID: ${{ steps.inputs.outputs.run_id }}
           SRC_REPO: ${{ steps.inputs.outputs.source_repo }}
@@ -106,19 +107,26 @@ jobs:
             exit 1
           fi
 
-          echo "✓ Found package: $PKG_FILE"
-          cp "$PKG_FILE" package.pkg.tar.zst
+          # Keep the real filename (not a generic "package.pkg.tar.zst").
+          # repo-add records this exact name inside zohara.db, and pacman
+          # fetches "<Server>/<that name>" to install it -- a renamed-on-
+          # upload package would 404 the moment a client tried to install
+          # it. It also has to survive multiple packages publishing to the
+          # same release without clobbering each other.
+          PKG_FILENAME="$(basename "$PKG_FILE")"
+          cp "$PKG_FILE" "$PKG_FILENAME"
+          echo "pkg_filename=$PKG_FILENAME" >> "$GITHUB_OUTPUT"
 
           # Validate file
-          FILE_SIZE=$(stat -c%s package.pkg.tar.zst 2>/dev/null || stat -f%z package.pkg.tar.zst)
+          FILE_SIZE=$(stat -c%s "$PKG_FILENAME" 2>/dev/null || stat -f%z "$PKG_FILENAME")
           if [ "$FILE_SIZE" -lt 1000 ]; then
             echo "::error::Package file too small ($FILE_SIZE bytes)"
             exit 1
           fi
 
           echo "✓ Downloaded package ($FILE_SIZE bytes)"
-          ls -lh package.pkg.tar.zst
-          tar -tf package.pkg.tar.zst | head -10
+          ls -lh "$PKG_FILENAME"
+          tar -tf "$PKG_FILENAME" | head -10
 
       - name: Get or create channel release
         env:
@@ -138,47 +146,75 @@ jobs:
             echo "✓ Release $TAG already exists"
           fi
 
-      - name: Download current zohara.db from the release
+      - name: Download every existing asset from the release
         env:
           TAG: ${{ steps.release_info.outputs.tag }}
         run: |
-          if gh release download "$TAG" --pattern 'zohara.db' --dir . 2>/dev/null; then
-            echo "✓ Downloaded existing zohara.db"
+          mkdir -p repo
+          # Pull down the current db AND every previously published package,
+          # not just zohara.db. repo-add only ever sees the .pkg.tar.zst
+          # files sitting next to the db it's given -- it does not read the
+          # db's own file list to fetch anything -- so skipping this step
+          # (the previous version of this workflow did) meant every publish
+          # replaced the whole repo with just the one package being added.
+          if gh release download "$TAG" --dir repo 2>/dev/null; then
+            echo "✓ Downloaded existing release assets:"
+            ls -la repo
           else
-            echo "ℹ No existing zohara.db; repo-add will create one"
+            echo "ℹ No existing release assets; this is the first publish to $TAG"
+          fi
+          # repo-add identifies the db by its own contents, not by file
+          # extension, but keep the on-disk name matching what pacman.conf's
+          # [zohara] section expects (Server + "/zohara.db") for clarity.
+          if [ -f repo/zohara.db ] && [ ! -f repo/zohara.db.tar.gz ]; then
+            mv repo/zohara.db repo/zohara.db.tar.gz
           fi
 
       - name: Run repo-add to merge the new package
+        env:
+          PKG_FILENAME: ${{ steps.download.outputs.pkg_filename }}
         run: |
-          repo-add --new --remove zohara.db.tar.gz package.pkg.tar.zst
-          [ -f zohara.db ] || cp zohara.db.tar.gz zohara.db
-          [ -f zohara.db.sig ] || true
+          cp "$PKG_FILENAME" "repo/$PKG_FILENAME"
+          cd repo
+          repo-add --remove zohara.db.tar.gz "$PKG_FILENAME"
+          cp zohara.db.tar.gz zohara.db
           echo "✓ repo-add completed"
-          echo "--- Package database contents ---"
-          tar -tf zohara.db | head -20
+          echo "--- Package database now contains ---"
+          tar -tf zohara.db | grep -v '/$' | grep -v '/desc$\|/files$' || true
 
       - name: Upload updated files to release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ steps.release_info.outputs.tag }}
         run: |
-          gh release upload "$TAG" \
-            package.pkg.tar.zst \
-            zohara.db \
-            zohara.db.tar.gz \
-            --clobber
-          echo "✓ Uploaded package and database to release"
+          cd repo
+          gh release upload "$TAG" ./* --clobber
+          echo "✓ Uploaded database and all packages to release"
 
       - name: Patch apps.json with the new package version
         env:
           PKG: ${{ steps.inputs.outputs.package }}
           VER: ${{ steps.inputs.outputs.version }}
+          TAG: ${{ steps.release_info.outputs.tag }}
+          PKG_FILENAME: ${{ steps.download.outputs.pkg_filename }}
         run: |
           python3 - <<'PYEOF'
-          import json, datetime
-          pkg = "$PKG"
-          ver = "$VER"
+          # NOTE: this heredoc is single-quoted ('PYEOF'), which is
+          # deliberate -- it stops bash from touching the python source at
+          # all (an f-string like f"{pkg}.svg" would otherwise be bash
+          # variable-substitution syntax to an *unquoted* heredoc). That
+          # means "$PKG"/"$VER" below must be read from os.environ, not
+          # written as literal shell interpolation -- the previous version
+          # of this file wrote pkg = "$PKG" here, which is quoted-heredoc
+          # literal text, not a substitution, so apps.json was patched with
+          # the four literal characters $PKG as the id every single run.
+          import json, os, datetime
+          pkg = os.environ["PKG"]
+          ver = os.environ["VER"]
+          tag = os.environ["TAG"]
+          pkg_filename = os.environ["PKG_FILENAME"]
           today = datetime.date.today().isoformat()
+          download_url = f"https://github.com/Zohaib8090/zohara-packages/releases/download/{tag}/{pkg_filename}"
 
           with open("apps.json") as f:
               data = json.load(f)
@@ -199,7 +235,7 @@ jobs:
                   "versions": [{
                       "version": ver,
                       "release_date": today,
-                      "download_url": f"https://github.com/Zohaib8090/zohara-packages/releases/download/stable/{pkg}-{ver}-1-x86_64.pkg.tar.zst",
+                      "download_url": download_url,
                       "changelog": f"Auto-published from {pkg} v{ver}"
                   }]
               }
@@ -211,12 +247,13 @@ jobs:
                   entry["versions"].insert(0, {
                       "version": ver,
                       "release_date": today,
-                      "download_url": f"https://github.com/Zohaib8090/zohara-packages/releases/download/stable/{pkg}-{ver}-1-x86_64.pkg.tar.zst",
+                      "download_url": download_url,
                       "changelog": f"Auto-published from {pkg} v{ver}"
                   })
                   entry["versions"] = entry["versions"][:10]
               else:
                   ver_entry["release_date"] = today
+                  ver_entry["download_url"] = download_url
 
           with open("apps.json", "w") as f:
               json.dump(data, f, indent=2)
