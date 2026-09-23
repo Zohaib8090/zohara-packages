@@ -31,6 +31,18 @@ jobs:
       image: archlinux:latest
     permissions:
       contents: write
+    # Job-level, so it's set for every step, not just the ones that
+    # happened to hit this so far. `safe.directory '*'` (later, once git
+    # is installed) fixes git refusing a repo by *ownership*; this fixes
+    # the separate problem this container job actually has -- confirmed
+    # in run 35848039184, "Commit and push apps.json" (which never calls
+    # gh, so the earlier --repo fixes don't cover it) still failed with
+    # "fatal: not in a git directory" even with safe.directory set,
+    # because the real error underneath is git's discovery walk refusing
+    # to cross this container's mount boundary at all: "Stopping at
+    # filesystem boundary (GIT_DISCOVERY_ACROSS_FILESYSTEM not set)".
+    env:
+      GIT_DISCOVERY_ACROSS_FILESYSTEM: "1"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
