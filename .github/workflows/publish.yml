@@ -280,20 +280,24 @@ jobs:
             gh release delete-asset "$TAG" "$stale" --repo "$REPO" -y 2>/dev/null || true
           done
           cd repo
-          # Explicit delete-then-plain-upload instead of `--clobber`:
-          # confirmed in run 35848239773 (the very next publish to the
-          # same tag after this workflow's first clean success) that
-          # --clobber's own internal replace logic can 404 deleting an
-          # asset id it had just listed --
-          #   HTTP 404: Not Found (.../releases/assets/548257791)
-          # -- a race in gh's implementation, not anything-order this
-          # workflow controls. Deleting by name ourselves first and then
-          # doing a plain upload (nothing left to clobber) removes that
-          # race instead of hoping it doesn't recur.
-          for f in *; do
-            gh release delete-asset "$TAG" "$f" --repo "$REPO" -y 2>/dev/null || true
-          done
-          gh release upload "$TAG" ./* --repo "$REPO"
+          # --clobber has an internal race (confirmed, run 35848239773: a
+          # republish to the same tag 404'd deleting an asset id gh's own
+          # --clobber had just listed). A from-scratch delete-then-plain-
+          # upload was tried as a fix but is worse: `gh release
+          # delete-asset -y` failed silently under `2>/dev/null || true`
+          # (confirmed, run 35848546972 -- "asset under the same name
+          # already exists" on the immediately following plain upload, so
+          # the deletes never actually took), and there's no reason to
+          # trust that pattern once removed. Simplest correct fix: keep
+          # --clobber (it works -- every run through this workflow except
+          # the one that hit the race has used it successfully) and retry
+          # once on failure, since the underlying issue is a transient
+          # race, not something this workflow's own inputs control.
+          if ! gh release upload "$TAG" ./* --repo "$REPO" --clobber; then
+            echo "::warning::upload failed, retrying once after a short delay (see commit message for why)"
+            sleep 5
+            gh release upload "$TAG" ./* --repo "$REPO" --clobber
+          fi
           echo "✓ Uploaded database and all packages to release"
 
       - name: Patch apps.json with the new package version
