@@ -241,6 +241,15 @@ jobs:
           # other package that had ever been published to this channel.
           shopt -s nullglob
           repo-add zohara.db.tar.gz ./*.pkg.tar.zst
+          # repo-add creating a brand-new db (first publish to a channel)
+          # also creates zohara.db as a symlink -> zohara.db.tar.gz itself
+          # (confirmed: run 35847890269 failed here with "cp:
+          # 'zohara.db.tar.gz' and 'zohara.db' are the same file"). `rm -f`
+          # first so this is a real regular-file copy either way -- gh
+          # release upload uploads a symlink's target transparently, so the
+          # asset content would have been fine, but a stray symlink among
+          # the uploaded files is fragile for no benefit.
+          rm -f zohara.db
           cp zohara.db.tar.gz zohara.db
           echo "✓ repo-add completed"
           echo "--- Package database now contains ---"
