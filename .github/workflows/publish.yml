@@ -163,12 +163,15 @@ jobs:
           else
             echo "ℹ No existing release assets; this is the first publish to $TAG"
           fi
-          # repo-add identifies the db by its own contents, not by file
-          # extension, but keep the on-disk name matching what pacman.conf's
-          # [zohara] section expects (Server + "/zohara.db") for clarity.
-          if [ -f repo/zohara.db ] && [ ! -f repo/zohara.db.tar.gz ]; then
-            mv repo/zohara.db repo/zohara.db.tar.gz
-          fi
+          # Old db copies may exist under other names from before this
+          # workflow was fixed (zohara.db.tar.zst from zohara-hub's
+          # publisher, which also uses the wrong compression extension for
+          # what pacman.conf's [zohara] section expects -- Server + "/zohara.db",
+          # no suffix). Drop them: repo-add below rebuilds zohara.db.tar.gz
+          # from every *.pkg.tar.zst file actually in repo/, which makes the
+          # rebuild correct regardless of what any previous db said.
+          rm -f repo/zohara.db repo/zohara.db.tar.gz repo/zohara.db.tar.zst \
+                repo/zohara.db.tar.xz repo/zohara.files* repo/*.sig
 
       - name: Run repo-add to merge the new package
         env:
@@ -176,7 +179,12 @@ jobs:
         run: |
           cp "$PKG_FILENAME" "repo/$PKG_FILENAME"
           cd repo
-          repo-add --remove zohara.db.tar.gz "$PKG_FILENAME"
+          # Rebuilds the db from every package actually present, not just
+          # the one just downloaded -- see the previous step for why a db
+          # merge that only looked at one file at a time kept losing every
+          # other package that had ever been published to this channel.
+          shopt -s nullglob
+          repo-add zohara.db.tar.gz ./*.pkg.tar.zst
           cp zohara.db.tar.gz zohara.db
           echo "✓ repo-add completed"
           echo "--- Package database now contains ---"
@@ -187,6 +195,12 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ steps.release_info.outputs.tag }}
         run: |
+          # Delete stray db assets under names this workflow doesn't
+          # produce (e.g. zohara.db.tar.zst, left by an older/other
+          # publisher) so pacman can't ever fetch a stale one by accident.
+          for stale in zohara.db.tar.zst zohara.db.tar.xz; do
+            gh release delete-asset "$TAG" "$stale" -y 2>/dev/null || true
+          done
           cd repo
           gh release upload "$TAG" ./* --clobber
           echo "✓ Uploaded database and all packages to release"
