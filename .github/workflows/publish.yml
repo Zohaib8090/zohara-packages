@@ -367,6 +367,14 @@ jobs:
 
       - name: Commit and push apps.json
         run: |
+          echo "--- diagnostics ---"
+          pwd
+          echo "GITHUB_WORKSPACE=$GITHUB_WORKSPACE"
+          ls -la
+          ls -la .git 2>&1 | head -5
+          git rev-parse --show-toplevel 2>&1 || true
+          git -C "$GITHUB_WORKSPACE" rev-parse --show-toplevel 2>&1 || true
+          echo "--- end diagnostics ---"
           git config user.name "Zohara Packages Bot"
           git config user.email "packages-bot@zohara.local"
           git add apps.json
