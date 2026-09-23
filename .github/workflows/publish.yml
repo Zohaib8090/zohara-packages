@@ -31,44 +31,31 @@ jobs:
       image: archlinux:latest
     permissions:
       contents: write
-    # Job-level, so it's set for every step, not just the ones that
-    # happened to hit this so far. `safe.directory '*'` (later, once git
-    # is installed) fixes git refusing a repo by *ownership*; this fixes
-    # the separate problem this container job actually has -- confirmed
-    # in run 35848039184, "Commit and push apps.json" (which never calls
-    # gh, so the earlier --repo fixes don't cover it) still failed with
-    # "fatal: not in a git directory" even with safe.directory set,
-    # because the real error underneath is git's discovery walk refusing
-    # to cross this container's mount boundary at all: "Stopping at
-    # filesystem boundary (GIT_DISCOVERY_ACROSS_FILESYSTEM not set)".
-    env:
-      GIT_DISCOVERY_ACROSS_FILESYSTEM: "1"
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
+      # ROOT CAUSE (confirmed 2026-09-23 via explicit diagnostics in run
+      # 35848974626, after several wrong guesses -- GIT_DISCOVERY_ACROSS_
+      # FILESYSTEM, safe.directory, --repo flags -- that treated the
+      # symptom as a git-config/discovery quirk): archlinux:latest has no
+      # git preinstalled. actions/checkout was the FIRST step, before
+      # "Install build tools" ever ran pacman -S git, so checkout had no
+      # git binary to clone with and silently fell back to downloading a
+      # tarball via the REST API instead -- which has no .git directory
+      # at all. `ls -la .git` in the diagnostic run: "No such file or
+      # directory". Every later git/gh command that depended on being in
+      # a real checkout was doomed from this first step, not from
+      # anything about ownership or filesystem boundaries. Installing git
+      # before checkout runs is what actually fixes it -- the discovery/
+      # ownership env vars and flags added along the way are harmless but
+      # were treating a different problem than the real one.
       - name: Install build tools
         run: |
           pacman-key --init
           pacman-key --populate archlinux
           pacman -Syu --noconfirm
-          # archlinux:latest has no git preinstalled -- it has to be
-          # installed before `git config` can run at all (this ran before
-          # the package existed on the very first attempt at this fix).
           pacman -S --noconfirm --needed github-cli git base-devel zstd curl
-          # Fixes a real, previously-hidden failure (confirmed 2026-09-23,
-          # run 35847279565): inside this `container:` job, git's own repo
-          # discovery refuses to walk up from the checkout -- "fatal: not a
-          # git repository ... Stopping at filesystem boundary
-          # (GIT_DISCOVERY_ACROSS_FILESYSTEM not set)" -- so `gh release
-          # view` (which shells out to git to infer the current repo when
-          # no --repo is given) failed on every single run, even though
-          # actions/checkout had already run. This is a container-mount
-          # quirk, not a missing checkout. `safe.directory '*'` plus every
-          # `gh release` call below now also passing --repo explicitly
-          # means neither git's ownership check nor its discovery walk is
-          # ever load-bearing here.
-          git config --global --add safe.directory '*'
+
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Resolve inputs
         id: inputs
@@ -371,14 +358,6 @@ jobs:
 
       - name: Commit and push apps.json
         run: |
-          echo "--- diagnostics ---"
-          pwd
-          echo "GITHUB_WORKSPACE=$GITHUB_WORKSPACE"
-          ls -la
-          ls -la .git 2>&1 | head -5
-          git rev-parse --show-toplevel 2>&1 || true
-          git -C "$GITHUB_WORKSPACE" rev-parse --show-toplevel 2>&1 || true
-          echo "--- end diagnostics ---"
           git config user.name "Zohara Packages Bot"
           git config user.email "packages-bot@zohara.local"
           git add apps.json
