@@ -37,6 +37,13 @@ jobs:
 
       - name: Install build tools
         run: |
+          pacman-key --init
+          pacman-key --populate archlinux
+          pacman -Syu --noconfirm
+          # archlinux:latest has no git preinstalled -- it has to be
+          # installed before `git config` can run at all (this ran before
+          # the package existed on the very first attempt at this fix).
+          pacman -S --noconfirm --needed github-cli git base-devel zstd curl
           # Fixes a real, previously-hidden failure (confirmed 2026-09-23,
           # run 35847279565): inside this `container:` job, git's own repo
           # discovery refuses to walk up from the checkout -- "fatal: not a
@@ -50,10 +57,6 @@ jobs:
           # means neither git's ownership check nor its discovery walk is
           # ever load-bearing here.
           git config --global --add safe.directory '*'
-          pacman-key --init
-          pacman-key --populate archlinux
-          pacman -Syu --noconfirm
-          pacman -S --noconfirm --needed github-cli git base-devel zstd curl
 
       - name: Resolve inputs
         id: inputs
