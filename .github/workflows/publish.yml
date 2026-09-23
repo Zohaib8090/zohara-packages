@@ -37,6 +37,19 @@ jobs:
 
       - name: Install build tools
         run: |
+          # Fixes a real, previously-hidden failure (confirmed 2026-09-23,
+          # run 35847279565): inside this `container:` job, git's own repo
+          # discovery refuses to walk up from the checkout -- "fatal: not a
+          # git repository ... Stopping at filesystem boundary
+          # (GIT_DISCOVERY_ACROSS_FILESYSTEM not set)" -- so `gh release
+          # view` (which shells out to git to infer the current repo when
+          # no --repo is given) failed on every single run, even though
+          # actions/checkout had already run. This is a container-mount
+          # quirk, not a missing checkout. `safe.directory '*'` plus every
+          # `gh release` call below now also passing --repo explicitly
+          # means neither git's ownership check nor its discovery walk is
+          # ever load-bearing here.
+          git config --global --add safe.directory '*'
           pacman-key --init
           pacman-key --populate archlinux
           pacman -Syu --noconfirm
@@ -81,28 +94,65 @@ jobs:
         env:
           RUN_ID: ${{ steps.inputs.outputs.run_id }}
           SRC_REPO: ${{ steps.inputs.outputs.source_repo }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ARTIFACT_NAME: ${{ github.event.client_payload.artifact_name }}
+          PKG_FILENAME_HINT: ${{ github.event.client_payload.pkg_filename }}
+          # GITHUB_TOKEN is scoped to THIS repo (zohara-packages) only, so it
+          # cannot list or download a workflow run's artifacts in a
+          # DIFFERENT repo (zohara-settings / zohara-apps) -- `gh run
+          # download --repo` there 404s/403s no matter how public the repo
+          # is, because artifact access is governed by Actions permissions
+          # on the repo owning the run, not repo visibility. Needs a PAT
+          # with read access to those repos, stored here as
+          # SOURCE_REPO_TOKEN (a *different* secret from
+          # PACKAGES_DISPATCH_TOKEN, which grants the opposite direction --
+          # write access into zohara-packages -- and lives in the source
+          # repos, not here).
+          GH_TOKEN: ${{ secrets.SOURCE_REPO_TOKEN }}
         run: |
           if [ -z "$RUN_ID" ]; then
             echo "::error::No run_id provided, cannot download artifact"
             exit 1
           fi
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::error::SOURCE_REPO_TOKEN is not set in this repo's Actions secrets."
+            echo "It needs a classic PAT with 'repo' scope, added at:"
+            echo "  https://github.com/Zohaib8090/zohara-packages/settings/secrets/actions"
+            exit 1
+          fi
 
           echo "Downloading artifact from run $RUN_ID in $SRC_REPO..."
 
-          # Download all artifacts from the run
-          gh run download "$RUN_ID" \
-            --repo "$SRC_REPO" \
-            --dir /tmp || {
-            echo "::error::Failed to download artifacts from run $RUN_ID"
-            exit 1
-          }
+          if [ -n "$ARTIFACT_NAME" ]; then
+            # Fetch only the named artifact, not every artifact the run
+            # produced -- a source repo whose run uploads more than one
+            # .pkg.tar.zst (zohara-apps: all four crates in one artifact)
+            # would otherwise leave which package ends up published to
+            # pure luck ("head -1" of whatever `find` happens to list
+            # first), regardless of which package_name was dispatched.
+            gh run download "$RUN_ID" --repo "$SRC_REPO" --name "$ARTIFACT_NAME" --dir /tmp || {
+              echo "::error::Failed to download artifact '$ARTIFACT_NAME' from run $RUN_ID"
+              exit 1
+            }
+          else
+            gh run download "$RUN_ID" --repo "$SRC_REPO" --dir /tmp || {
+              echo "::error::Failed to download artifacts from run $RUN_ID"
+              exit 1
+            }
+          fi
 
-          # Find the .pkg.tar.zst file
-          PKG_FILE=$(find /tmp -name "*.pkg.tar.zst" -type f | head -1)
+          # Find the .pkg.tar.zst file. If the dispatch told us the exact
+          # filename to expect (pkg_filename -- always set when
+          # artifact_name is, since both come from the same multi-package
+          # build), require that one specifically instead of "whichever
+          # sorts first".
+          if [ -n "$PKG_FILENAME_HINT" ]; then
+            PKG_FILE=$(find /tmp -name "$PKG_FILENAME_HINT" -type f | head -1)
+          else
+            PKG_FILE=$(find /tmp -name "*.pkg.tar.zst" -type f | head -1)
+          fi
 
           if [ -z "$PKG_FILE" ]; then
-            echo "::error::No .pkg.tar.zst found in downloaded artifacts"
+            echo "::error::No matching .pkg.tar.zst found in downloaded artifacts"
             ls -la /tmp
             exit 1
           fi
@@ -131,13 +181,15 @@ jobs:
       - name: Get or create channel release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
           TAG: ${{ steps.release_info.outputs.tag }}
           CHANNEL: ${{ steps.inputs.outputs.channel }}
         run: |
-          REL_ID=$(gh release view "$TAG" --json id -q '.id' 2>/dev/null || true)
+          REL_ID=$(gh release view "$TAG" --repo "$REPO" --json id -q '.id' 2>/dev/null || true)
           if [ -z "$REL_ID" ]; then
             PRE=$([ "$CHANNEL" != "stable" ] && echo "--prerelease" || echo "")
             gh release create "$TAG" \
+              --repo "$REPO" \
               --title "Zohara Packages — $CHANNEL" \
               --notes "Auto-managed Arch package repository for the **$CHANNEL** channel." \
               $PRE
@@ -148,6 +200,14 @@ jobs:
 
       - name: Download every existing asset from the release
         env:
+          # This step had NO GH_TOKEN at all before -- gh silently fell
+          # back to whatever ambient auth (usually none) the container
+          # had, `gh release download` failed every time, and the `2>/dev/null
+          # || ...` swallowed it into "this is the first publish" on
+          # every single run. Combined with the missing --repo above,
+          # this step could never have actually downloaded anything.
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
           TAG: ${{ steps.release_info.outputs.tag }}
         run: |
           mkdir -p repo
@@ -157,7 +217,7 @@ jobs:
           # db's own file list to fetch anything -- so skipping this step
           # (the previous version of this workflow did) meant every publish
           # replaced the whole repo with just the one package being added.
-          if gh release download "$TAG" --dir repo 2>/dev/null; then
+          if gh release download "$TAG" --repo "$REPO" --dir repo 2>/dev/null; then
             echo "✓ Downloaded existing release assets:"
             ls -la repo
           else
@@ -193,16 +253,17 @@ jobs:
       - name: Upload updated files to release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
           TAG: ${{ steps.release_info.outputs.tag }}
         run: |
           # Delete stray db assets under names this workflow doesn't
           # produce (e.g. zohara.db.tar.zst, left by an older/other
           # publisher) so pacman can't ever fetch a stale one by accident.
           for stale in zohara.db.tar.zst zohara.db.tar.xz; do
-            gh release delete-asset "$TAG" "$stale" -y 2>/dev/null || true
+            gh release delete-asset "$TAG" "$stale" --repo "$REPO" -y 2>/dev/null || true
           done
           cd repo
-          gh release upload "$TAG" ./* --clobber
+          gh release upload "$TAG" ./* --repo "$REPO" --clobber
           echo "✓ Uploaded database and all packages to release"
 
       - name: Patch apps.json with the new package version
