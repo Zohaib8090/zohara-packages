@@ -357,14 +357,30 @@ jobs:
           PYEOF
 
       - name: Commit and push apps.json
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          PKG: ${{ steps.inputs.outputs.package }}
+          VER: ${{ steps.inputs.outputs.version }}
         run: |
-          git config user.name "Zohara Packages Bot"
-          git config user.email "packages-bot@zohara.local"
-          git add apps.json
-          if git diff --cached --quiet; then
-            echo "ℹ No apps.json changes"
-          else
-            git commit -m "apps: bump ${{ steps.inputs.outputs.package }} to ${{ steps.inputs.outputs.version }}"
-            git push origin main
-            echo "✓ Pushed apps.json"
-          fi
+          # Uses the Contents API instead of `git commit`+`git push`.
+          # Every attempt to make plain git work in this container job
+          # failed identically ("fatal: not in a git directory") across
+          # five different theories and fixes -- container-mount
+          # discovery, safe.directory, and finally installing git before
+          # actions/checkout runs (confirmed via explicit diagnostics that
+          # each one addressed a real-looking but wrong cause; even with
+          # git genuinely present before checkout, run 35849155779 hit
+          # the exact same error). The API needs no local .git at all, so
+          # it sidesteps whatever is actually going on with checkout in
+          # this container rather than chasing it further. Same approach
+          # already proven working in zohara-hub's update_apps_json.
+          CURRENT_SHA=$(gh api "repos/$REPO/contents/apps.json" -q .sha)
+          NEW_CONTENT_B64=$(base64 -w0 apps.json)
+          gh api "repos/$REPO/contents/apps.json" \
+            --method PUT \
+            -f message="apps: bump $PKG to $VER" \
+            -f content="$NEW_CONTENT_B64" \
+            -f sha="$CURRENT_SHA" \
+            > /dev/null
+          echo "✓ Pushed apps.json via Contents API"
