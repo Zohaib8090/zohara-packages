@@ -20,6 +20,44 @@
       ]
     },
     {
+      "category": "System",
+      "current_version": "0.1.0",
+      "description": "App store and update center for Zohara OS.",
+      "icon_url": "https://raw.githubusercontent.com/Zohaib8090/zohara/master/zohara-store-rs/data/zohara-store.svg",
+      "id": "zohara-store",
+      "name": "Zohara Store",
+      "package": "zohara-store",
+      "publisher": "Zohara OS Team",
+      "type": "pacman",
+      "versions": [
+        {
+          "changelog": "Adds real update detection, per-app notification opt-in, and restore-previous-version support.",
+          "download_url": "",
+          "release_date": "2026-09-23",
+          "version": "0.1.0"
+        }
+      ]
+    },
+    {
+      "category": "System",
+      "current_version": "0.1.0",
+      "description": "Linux-side companion daemon that pairs Zohara OS with the Zohara Link Android app (clipboard sync, file transfer, notifications, remote input).",
+      "icon_url": "https://raw.githubusercontent.com/Zohaib8090/zohara-link/main/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png",
+      "id": "zohara-linkd",
+      "name": "Zohara Link",
+      "package": "zohara-linkd",
+      "publisher": "Zohara OS Team",
+      "type": "pacman",
+      "versions": [
+        {
+          "changelog": "Rust rewrite: TLS/PIN pairing, mDNS discovery, clipboard sync, file transfer, notification mirroring, remote input.",
+          "download_url": "",
+          "release_date": "2026-09-23",
+          "version": "0.1.0"
+        }
+      ]
+    },
+    {
       "category": "App",
       "current_version": "latest",
       "description": "A fast, privacy-focused web browser.",
@@ -155,6 +193,8 @@
   ],
   "featured": [
     "zohara-settings",
+    "zohara-store",
+    "zohara-linkd",
     "firefox",
     "vscodium",
     "lutris"
