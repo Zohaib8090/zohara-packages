@@ -99,27 +99,20 @@ jobs:
           SRC_REPO: ${{ steps.inputs.outputs.source_repo }}
           ARTIFACT_NAME: ${{ github.event.client_payload.artifact_name }}
           PKG_FILENAME_HINT: ${{ github.event.client_payload.pkg_filename }}
-          # GITHUB_TOKEN is scoped to THIS repo (zohara-packages) only, so it
-          # cannot list or download a workflow run's artifacts in a
-          # DIFFERENT repo (zohara-settings / zohara-apps) -- `gh run
-          # download --repo` there 404s/403s no matter how public the repo
-          # is, because artifact access is governed by Actions permissions
-          # on the repo owning the run, not repo visibility. Needs a PAT
-          # with read access to those repos, stored here as
-          # SOURCE_REPO_TOKEN (a *different* secret from
-          # PACKAGES_DISPATCH_TOKEN, which grants the opposite direction --
-          # write access into zohara-packages -- and lives in the source
-          # repos, not here).
-          GH_TOKEN: ${{ secrets.SOURCE_REPO_TOKEN }}
+          # Verified working (run 35847279565, 2026-09-23): the default
+          # GITHUB_TOKEN, though nominally scoped to this repo, is enough
+          # to read a *public* repo's workflow-run artifacts cross-repo --
+          # unlike writes, GitHub doesn't gate reading public Actions data
+          # behind per-repo token scoping. zohara-settings/zohara-apps are
+          # both public, so this works with no extra secret. An earlier
+          # version of this step required a new SOURCE_REPO_TOKEN PAT,
+          # which was unnecessary and untested; if any source repo is ever
+          # made private, that assumption breaks and a PAT would be needed
+          # again.
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           if [ -z "$RUN_ID" ]; then
             echo "::error::No run_id provided, cannot download artifact"
-            exit 1
-          fi
-          if [ -z "$GH_TOKEN" ]; then
-            echo "::error::SOURCE_REPO_TOKEN is not set in this repo's Actions secrets."
-            echo "It needs a classic PAT with 'repo' scope, added at:"
-            echo "  https://github.com/Zohaib8090/zohara-packages/settings/secrets/actions"
             exit 1
           fi
 
