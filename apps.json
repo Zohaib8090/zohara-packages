@@ -239,6 +239,25 @@
           "changelog": "Auto-published from zohara-voice v1.9.4"
         }
       ]
+    },
+    {
+      "id": "zohara-welcome",
+      "name": "Zohara Welcome",
+      "publisher": "Zohara OS Team",
+      "description": "zohara-welcome \u2014 published via the Zohara Packages channel.",
+      "category": "System",
+      "icon_url": "https://raw.githubusercontent.com/Zohaib8090/zohara-welcome/main/data/icons/scalable/apps/zohara-welcome.svg",
+      "type": "pacman",
+      "package": "zohara-welcome",
+      "current_version": "0.1.0.202609251912",
+      "versions": [
+        {
+          "version": "0.1.0.202609251912",
+          "release_date": "2026-09-25",
+          "download_url": "https://github.com/Zohaib8090/zohara-packages/releases/download/stable/zohara-welcome-0.1.0.202609251912-1-x86_64.pkg.tar.zst",
+          "changelog": "Auto-published from zohara-welcome v0.1.0.202609251912"
+        }
+      ]
     }
   ],
   "featured": [
