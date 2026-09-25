@@ -52,7 +52,7 @@ jobs:
           pacman-key --init
           pacman-key --populate archlinux
           pacman -Syu --noconfirm
-          pacman -S --noconfirm --needed github-cli git base-devel zstd curl
+          pacman -S --noconfirm --needed github-cli git base-devel zstd curl jq
 
       - name: Checkout
         uses: actions/checkout@v4
@@ -294,67 +294,39 @@ jobs:
           TAG: ${{ steps.release_info.outputs.tag }}
           PKG_FILENAME: ${{ steps.download.outputs.pkg_filename }}
         run: |
-          python3 - <<'PYEOF'
-          # NOTE: this heredoc is single-quoted ('PYEOF'), which is
-          # deliberate -- it stops bash from touching the python source at
-          # all (an f-string like f"{pkg}.svg" would otherwise be bash
-          # variable-substitution syntax to an *unquoted* heredoc). That
-          # means "$PKG"/"$VER" below must be read from os.environ, not
-          # written as literal shell interpolation -- the previous version
-          # of this file wrote pkg = "$PKG" here, which is quoted-heredoc
-          # literal text, not a substitution, so apps.json was patched with
-          # the four literal characters $PKG as the id every single run.
-          import json, os, datetime
-          pkg = os.environ["PKG"]
-          ver = os.environ["VER"]
-          tag = os.environ["TAG"]
-          pkg_filename = os.environ["PKG_FILENAME"]
-          today = datetime.date.today().isoformat()
-          download_url = f"https://github.com/Zohaib8090/zohara-packages/releases/download/{tag}/{pkg_filename}"
-
-          with open("apps.json") as f:
-              data = json.load(f)
-
-          entry = next((a for a in data["apps"] if a["id"] == pkg or a.get("package") == pkg), None)
-
-          if entry is None:
-              entry = {
-                  "id": pkg,
-                  "name": pkg.replace("-", " ").title(),
-                  "publisher": "Zohara OS Team",
-                  "description": f"{pkg} — published via the Zohara Packages channel.",
-                  "category": "System",
-                  "icon_url": f"https://raw.githubusercontent.com/Zohaib8090/{pkg}/main/data/icons/scalable/apps/{pkg}.svg",
-                  "type": "pacman",
-                  "package": pkg,
-                  "current_version": ver,
-                  "versions": [{
-                      "version": ver,
-                      "release_date": today,
-                      "download_url": download_url,
-                      "changelog": f"Auto-published from {pkg} v{ver}"
-                  }]
-              }
-              data["apps"].append(entry)
-          else:
-              entry["current_version"] = ver
-              ver_entry = next((v for v in entry["versions"] if v["version"] == ver), None)
-              if ver_entry is None:
-                  entry["versions"].insert(0, {
-                      "version": ver,
-                      "release_date": today,
-                      "download_url": download_url,
-                      "changelog": f"Auto-published from {pkg} v{ver}"
-                  })
-                  entry["versions"] = entry["versions"][:10]
-              else:
-                  ver_entry["release_date"] = today
-                  ver_entry["download_url"] = download_url
-
-          with open("apps.json", "w") as f:
-              json.dump(data, f, indent=2)
-          print(f"✓ Updated apps.json: {pkg} -> {ver}")
-          PYEOF
+          today=$(date -u +%F)
+          url="https://github.com/Zohaib8090/zohara-packages/releases/download/${TAG}/${PKG_FILENAME}"
+          jq --arg pkg "$PKG" --arg ver "$VER" --arg url "$url" --arg today "$today" '
+            def ventry: {version: $ver, release_date: $today, download_url: $url,
+                         changelog: ("Auto-published from " + $pkg + " v" + $ver)};
+            if any(.apps[]; .id == $pkg or .package == $pkg) then
+              .apps |= map(
+                if .id == $pkg or .package == $pkg then
+                  .current_version = $ver
+                  | if any(.versions[]; .version == $ver) then
+                      .versions |= map(if .version == $ver
+                                       then .release_date = $today | .download_url = $url
+                                       else . end)
+                    else
+                      .versions = ([ventry] + .versions)[:10]
+                    end
+                else . end)
+            else
+              .apps += [{
+                id: $pkg,
+                name: ($pkg | gsub("-"; " ")),
+                publisher: "Zohara OS Team",
+                description: ($pkg + " — published via the Zohara Packages channel."),
+                category: "System",
+                icon_url: ("https://raw.githubusercontent.com/Zohaib8090/" + $pkg + "/main/data/icons/scalable/apps/" + $pkg + ".svg"),
+                type: "pacman",
+                package: $pkg,
+                current_version: $ver,
+                versions: [ventry]
+              }]
+            end' apps.json > apps.json.new
+          mv apps.json.new apps.json
+          echo "✓ Updated apps.json: $PKG -> $VER"
 
       - name: Commit and push apps.json
         env:
