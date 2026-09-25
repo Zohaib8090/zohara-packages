@@ -270,6 +270,25 @@
           "changelog": "Auto-published from zohara-welcome v0.1.0.202609251912"
         }
       ]
+    },
+    {
+      "id": "zohara-snapshots",
+      "name": "Zohara Snapshots",
+      "publisher": "Zohara OS Team",
+      "description": "zohara-snapshots \u2014 published via the Zohara Packages channel.",
+      "category": "System",
+      "icon_url": "https://raw.githubusercontent.com/Zohaib8090/zohara-snapshots/main/data/icons/scalable/apps/zohara-snapshots.svg",
+      "type": "pacman",
+      "package": "zohara-snapshots",
+      "current_version": "1",
+      "versions": [
+        {
+          "version": "1",
+          "release_date": "2026-09-25",
+          "download_url": "https://github.com/Zohaib8090/zohara-packages/releases/download/stable/zohara-snapshots-1-1-any.pkg.tar.zst",
+          "changelog": "Auto-published from zohara-snapshots v1"
+        }
+      ]
     }
   ],
   "featured": [
