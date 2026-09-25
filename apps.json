@@ -33,7 +33,7 @@
     },
     {
       "category": "System",
-      "current_version": "0.1.0.202609252007",
+      "current_version": "0.1.0.202609252053",
       "description": "App store and update center for Zohara OS.",
       "icon_url": "https://raw.githubusercontent.com/Zohaib8090/zohara/master/zohara-store-rs/data/zohara-store.svg",
       "id": "zohara-store",
@@ -42,6 +42,12 @@
       "publisher": "Zohara OS Team",
       "type": "pacman",
       "versions": [
+        {
+          "version": "0.1.0.202609252053",
+          "release_date": "2026-09-25",
+          "download_url": "https://github.com/Zohaib8090/zohara-packages/releases/download/stable/zohara-store-0.1.0.202609252053-1-x86_64.pkg.tar.zst",
+          "changelog": "Auto-published from zohara-store v0.1.0.202609252053"
+        },
         {
           "version": "0.1.0.202609252007",
           "release_date": "2026-09-25",
@@ -218,7 +224,7 @@
       "id": "zohara-voice-model",
       "name": "Zohara Voice Model",
       "publisher": "Zohara OS Team",
-      "description": "zohara-voice-model \u2014 published via the Zohara Packages channel.",
+      "description": "zohara-voice-model — published via the Zohara Packages channel.",
       "category": "System",
       "icon_url": "https://raw.githubusercontent.com/Zohaib8090/zohara-voice-model/main/data/icons/scalable/apps/zohara-voice-model.svg",
       "type": "pacman",
@@ -237,7 +243,7 @@
       "id": "zohara-voice",
       "name": "Zohara Voice",
       "publisher": "Zohara OS Team",
-      "description": "zohara-voice \u2014 published via the Zohara Packages channel.",
+      "description": "zohara-voice — published via the Zohara Packages channel.",
       "category": "System",
       "icon_url": "https://raw.githubusercontent.com/Zohaib8090/zohara-voice/main/data/icons/scalable/apps/zohara-voice.svg",
       "type": "pacman",
@@ -256,7 +262,7 @@
       "id": "zohara-welcome",
       "name": "Zohara Welcome",
       "publisher": "Zohara OS Team",
-      "description": "zohara-welcome \u2014 published via the Zohara Packages channel.",
+      "description": "zohara-welcome — published via the Zohara Packages channel.",
       "category": "System",
       "icon_url": "https://raw.githubusercontent.com/Zohaib8090/zohara-welcome/main/data/icons/scalable/apps/zohara-welcome.svg",
       "type": "pacman",
@@ -281,7 +287,7 @@
       "id": "zohara-snapshots",
       "name": "Zohara Snapshots",
       "publisher": "Zohara OS Team",
-      "description": "zohara-snapshots \u2014 published via the Zohara Packages channel.",
+      "description": "zohara-snapshots — published via the Zohara Packages channel.",
       "category": "System",
       "icon_url": "https://raw.githubusercontent.com/Zohaib8090/zohara-snapshots/main/data/icons/scalable/apps/zohara-snapshots.svg",
       "type": "pacman",
