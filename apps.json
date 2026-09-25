@@ -220,6 +220,25 @@
           "changelog": "Auto-published from zohara-voice-model v1"
         }
       ]
+    },
+    {
+      "id": "zohara-voice",
+      "name": "Zohara Voice",
+      "publisher": "Zohara OS Team",
+      "description": "zohara-voice \u2014 published via the Zohara Packages channel.",
+      "category": "System",
+      "icon_url": "https://raw.githubusercontent.com/Zohaib8090/zohara-voice/main/data/icons/scalable/apps/zohara-voice.svg",
+      "type": "pacman",
+      "package": "zohara-voice",
+      "current_version": "1.9.4",
+      "versions": [
+        {
+          "version": "1.9.4",
+          "release_date": "2026-09-25",
+          "download_url": "https://github.com/Zohaib8090/zohara-packages/releases/download/stable/zohara-voice-1.9.4-1-x86_64.pkg.tar.zst",
+          "changelog": "Auto-published from zohara-voice v1.9.4"
+        }
+      ]
     }
   ],
   "featured": [
