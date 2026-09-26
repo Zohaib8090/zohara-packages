@@ -33,7 +33,7 @@
     },
     {
       "category": "System",
-      "current_version": "0.1.0.202609260157",
+      "current_version": "0.1.0.202609252053",
       "description": "App store and update center for Zohara OS.",
       "icon_url": "https://raw.githubusercontent.com/Zohaib8090/zohara/master/zohara-store-rs/data/zohara-store.svg",
       "id": "zohara-store",
@@ -42,12 +42,6 @@
       "publisher": "Zohara OS Team",
       "type": "pacman",
       "versions": [
-        {
-          "version": "0.1.0.202609260157",
-          "release_date": "2026-09-26",
-          "download_url": "https://github.com/Zohaib8090/zohara-packages/releases/download/stable/zohara-store-0.1.0.202609260157-1-x86_64.pkg.tar.zst",
-          "changelog": "Auto-published from zohara-store v0.1.0.202609260157"
-        },
         {
           "version": "0.1.0.202609252053",
           "release_date": "2026-09-25",
@@ -273,8 +267,14 @@
       "icon_url": "https://raw.githubusercontent.com/Zohaib8090/zohara-welcome/main/data/icons/scalable/apps/zohara-welcome.svg",
       "type": "pacman",
       "package": "zohara-welcome",
-      "current_version": "0.1.0.202609252014",
+      "current_version": "0.1.0.202609260158",
       "versions": [
+        {
+          "version": "0.1.0.202609260158",
+          "release_date": "2026-09-26",
+          "download_url": "https://github.com/Zohaib8090/zohara-packages/releases/download/stable/zohara-welcome-0.1.0.202609260158-1-x86_64.pkg.tar.zst",
+          "changelog": "Auto-published from zohara-welcome v0.1.0.202609260158"
+        },
         {
           "version": "0.1.0.202609252014",
           "release_date": "2026-09-25",
