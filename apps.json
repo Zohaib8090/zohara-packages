@@ -303,8 +303,14 @@
       "icon_url": "https://raw.githubusercontent.com/Zohaib8090/zohara-welcome/main/data/icons/scalable/apps/zohara-welcome.svg",
       "type": "pacman",
       "package": "zohara-welcome",
-      "current_version": "0.1.0.202609260158",
+      "current_version": "0.1.0.202609271646",
       "versions": [
+        {
+          "version": "0.1.0.202609271646",
+          "release_date": "2026-09-27",
+          "download_url": "https://github.com/Zohaib8090/zohara-packages/releases/download/stable/zohara-welcome-0.1.0.202609271646-1-x86_64.pkg.tar.zst",
+          "changelog": "Auto-published from zohara-welcome v0.1.0.202609271646"
+        },
         {
           "version": "0.1.0.202609260158",
           "release_date": "2026-09-26",
