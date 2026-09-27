@@ -326,8 +326,8 @@
       "versions": [
         {
           "version": "1",
-          "release_date": "2026-09-25",
-          "download_url": "https://github.com/Zohaib8090/zohara-packages/releases/download/stable/zohara-snapshots-1-1-any.pkg.tar.zst",
+          "release_date": "2026-09-27",
+          "download_url": "https://github.com/Zohaib8090/zohara-packages/releases/download/stable/zohara-snapshots-1-2-any.pkg.tar.zst",
           "changelog": "Auto-published from zohara-snapshots v1"
         }
       ]
