@@ -118,7 +118,7 @@
         {
           "changelog": "Rust rewrite: TLS/PIN pairing, mDNS discovery, clipboard sync, file transfer, notification mirroring, remote input.",
           "download_url": "https://github.com/Zohaib8090/zohara-packages/releases/download/stable/zohara-linkd-0.1.0-1-x86_64.pkg.tar.zst",
-          "release_date": "2026-09-24",
+          "release_date": "2026-09-28",
           "version": "0.1.0"
         }
       ]
