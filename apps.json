@@ -287,7 +287,7 @@
       "versions": [
         {
           "version": "1",
-          "release_date": "2026-09-26",
+          "release_date": "2026-09-30",
           "download_url": "https://github.com/Zohaib8090/zohara-packages/releases/download/stable/zohara-voice-model-1-1-any.pkg.tar.zst",
           "changelog": "Auto-published from zohara-voice-model v1"
         }
