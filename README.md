@@ -34,6 +34,13 @@ Each channel is a separate GitHub release in this repo, with its own
 | beta    | `channel-beta` | `[zohara-beta]`   | Auto-published on every push to `zohara-settings/beta`. |
 | alpha   | `channel-alpha`| `[zohara-alpha]`  | Manual publish only (`workflow_dispatch` on this repo). |
 
+pacman downloads `<repo name>.db`, so a system with `[zohara-stable]` in
+`/etc/pacman.conf` fetches `zohara-stable.db`, not `zohara.db`. Every publish
+therefore uploads the database under both names (`zohara.db` and
+`zohara-<channel>.db`, plus the `.files` copies). If a channel's release only
+has `zohara.db`, `pacman -Sy` fails with a 404 on every system using it and
+no updates can be installed.
+
 Users pick a channel once:
 ```bash
 sudo zohara-channel set stable   # default

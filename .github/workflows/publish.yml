@@ -204,6 +204,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
           TAG: ${{ steps.release_info.outputs.tag }}
+          CHANNEL: ${{ steps.inputs.outputs.channel }}
         run: |
           mkdir -p repo
           # Pull down the current db AND every previously published package,
@@ -227,10 +228,14 @@ jobs:
           # rebuild correct regardless of what any previous db said.
           rm -f repo/zohara.db repo/zohara.db.tar.gz repo/zohara.db.tar.zst \
                 repo/zohara.db.tar.xz repo/zohara.files* repo/*.sig
+          # Same for the channel-named copies made below (zohara-stable.db, ...).
+          rm -f "repo/zohara-$CHANNEL.db" "repo/zohara-$CHANNEL.db.tar.gz" \
+                "repo/zohara-$CHANNEL.files" "repo/zohara-$CHANNEL.files.tar.gz"
 
       - name: Run repo-add to merge the new package
         env:
           PKG_FILENAME: ${{ steps.download.outputs.pkg_filename }}
+          CHANNEL: ${{ steps.inputs.outputs.channel }}
         run: |
           cp "$PKG_FILENAME" "repo/$PKG_FILENAME"
           cd repo
@@ -250,6 +255,18 @@ jobs:
           # the uploaded files is fragile for no benefit.
           rm -f zohara.db
           cp zohara.db.tar.gz zohara.db
+          # pacman names the file it downloads after the repo SECTION in
+          # /etc/pacman.conf: [zohara-stable] fetches "<Server>/zohara-stable.db".
+          # Installed systems have [zohara-stable] / [zohara-beta] / [zohara-alpha]
+          # (customize_airootfs.sh, zohara-channel), so a release that only had
+          # zohara.db made every `pacman -Sy` fail with a 404 and blocked all system
+          # updates (found in a VM, 2026-09-30). Keep zohara.db too: zohara-channel
+          # probes it and older setups use a [zohara] section.
+          for ext in db files; do
+            [ -e "zohara.$ext.tar.gz" ] || continue
+            cp -L "zohara.$ext.tar.gz" "zohara-$CHANNEL.$ext.tar.gz"
+            cp -L "zohara.$ext.tar.gz" "zohara-$CHANNEL.$ext"
+          done
           echo "✓ repo-add completed"
           echo "--- Package database now contains ---"
           tar -tf zohara.db | grep -v '/$' | grep -v '/desc$\|/files$' || true
