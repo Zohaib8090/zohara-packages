@@ -105,7 +105,8 @@ jobs:
           if [ -n "$PKG_FILENAME" ]; then
             find /tmp/artifact -type f -name "$PKG_FILENAME" > /tmp/found.txt
           else
-            find /tmp/artifact -type f -name '*.pkg.tar.zst' | sort > /tmp/found.txt
+            # Debug-symbol packages (<name>-debug) are not for users; skip them unless one was asked for by name.
+            find /tmp/artifact -type f -name '*.pkg.tar.zst' ! -name '*-debug-[0-9]*' | sort > /tmp/found.txt
           fi
           [ -s /tmp/found.txt ] || { echo "::error::no matching .pkg.tar.zst in the run's artifacts"; ls -laR /tmp/artifact; exit 1; }
           : > published.tsv
