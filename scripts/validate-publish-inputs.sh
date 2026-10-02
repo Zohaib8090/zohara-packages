@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+# Checks the inputs of a publish BEFORE anything is downloaded or uploaded. Pure text checks, no network, so
+# scripts/test-publish-scripts.sh can run it anywhere. Values arrive as environment variables (never pasted
+# into a script by the workflow), so a crafted value cannot turn into shell code.
+#
+#   CHANNEL        stable | beta | alpha
+#   SRC_REPO       must be one of the allowed source repositories below
+#   RUN_ID         digits only
+#   ARTIFACT_NAME  optional, plain file-name characters
+#   PKG_FILENAME   optional, plain file-name characters, must end in .pkg.tar.zst
+#   PKG, VER       optional (the package name and version are read from the package itself; if given they must match)
+set -euo pipefail
+
+ALLOWED_SOURCES=(Zohaib8090/zohara-settings Zohaib8090/zohara-apps)
+
+fail() { echo "::error::$*"; exit 1; }
+
+case "${CHANNEL:-}" in stable|beta|alpha) ;; *) fail "channel must be stable, beta or alpha (got '${CHANNEL:-}')";; esac
+
+ok=0
+for r in "${ALLOWED_SOURCES[@]}"; do [ "${SRC_REPO:-}" = "$r" ] && ok=1; done
+[ "$ok" = 1 ] || fail "source repository '${SRC_REPO:-}' is not on the allowed list: ${ALLOWED_SOURCES[*]}"
+
+[[ "${RUN_ID:-}" =~ ^[0-9]+$ ]] || fail "run id must be digits only (got '${RUN_ID:-}')"
+
+safe_name='^[A-Za-z0-9@._+:~-]+$'
+if [ -n "${ARTIFACT_NAME:-}" ]; then [[ "$ARTIFACT_NAME" =~ $safe_name ]] || fail "artifact name has characters that are not allowed"; fi
+if [ -n "${PKG_FILENAME:-}" ]; then
+  [[ "$PKG_FILENAME" =~ $safe_name ]] || fail "package file name has characters that are not allowed"
+  [[ "$PKG_FILENAME" == *.pkg.tar.zst ]] || fail "package file name must end in .pkg.tar.zst"
+fi
+if [ -n "${PKG:-}" ]; then [[ "$PKG" =~ ^[a-z0-9@._+-]+$ ]] || fail "package name has characters that are not allowed"; fi
+if [ -n "${VER:-}" ]; then [[ "$VER" =~ ^[A-Za-z0-9._+:~-]+$ ]] || fail "version has characters that are not allowed"; fi
+echo "inputs ok: channel=$CHANNEL source=$SRC_REPO run=$RUN_ID"

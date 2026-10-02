@@ -1,52 +1,80 @@
 name: Publish Zohara Package
 
+# Publishes the package(s) of one successful source-repo build run to a channel release in this repository.
+#
+# Started by:
+#   * repository_dispatch "package-published": the source repo's own build workflow, and the admin site
+#     (zohara-updates-system), send  run_id, source_repo, channel  and optionally  artifact_name, pkg_filename
+#   * workflow_dispatch (the "Run workflow" button): the same inputs by hand
+#
+# Everything the run needs is checked first (scripts/validate-publish-inputs.sh: allowed source repo, channel,
+# plain characters only; scripts/verify-source-run.sh: the run succeeded, came from a push or manual start on the
+# right branch of that repository itself). The package name and version are read from the package file
+# (scripts/read-pkginfo.sh), not taken from the request. Values reach the scripts as environment variables, never
+# pasted into script text.
+#
+# Several publishes may run at once (zohara-apps sends one per package). The release database is rebuilt from
+# every package in the release, then re-read after upload to confirm it holds everything this run published;
+# if another run overwrote it in between, the merge is done again. See docs in README.md.
+#
+# apps.json (the Store catalog) is only touched by stable publishes: an alpha or beta test must not change what
+# stable users see.
+
 on:
   repository_dispatch:
     types: [package-published]
   workflow_dispatch:
     inputs:
-      package_name:
-        description: 'Arch package name (e.g. zohara-settings)'
+      source_repo:
+        description: 'Source repository'
         required: true
-      version:
-        description: 'New version (e.g. 0.2.0)'
-        required: true
-      artifact_url:
-        description: 'URL to the .pkg.tar.zst artifact'
+        default: 'Zohaib8090/zohara-settings'
+        type: choice
+        options:
+          - Zohaib8090/zohara-settings
+          - Zohaib8090/zohara-apps
+      run_id:
+        description: 'Run id of a successful build in that repository'
         required: true
       channel:
         description: 'Release channel'
         required: true
-        default: 'stable'
+        default: 'alpha'
         type: choice
         options:
-          - stable
-          - beta
           - alpha
+          - beta
+          - stable
+      artifact_name:
+        description: 'Artifact name (empty = every artifact of the run)'
+        required: false
+      pkg_filename:
+        description: 'Only this package file (empty = every package in the artifact)'
+        required: false
+
+permissions:
+  contents: write
 
 jobs:
   publish:
     runs-on: ubuntu-latest
     container:
       image: archlinux:latest
-    permissions:
-      contents: write
+    env:
+      # One place that reads the trigger; every later step uses these as environment variables.
+      EVENT: ${{ github.event_name }}
+      CHANNEL: ${{ github.event.client_payload.channel || github.event.inputs.channel || 'stable' }}
+      SRC_REPO: ${{ github.event.client_payload.source_repo || github.event.inputs.source_repo }}
+      RUN_ID: ${{ github.event.client_payload.run_id || github.event.inputs.run_id }}
+      ARTIFACT_NAME: ${{ github.event.client_payload.artifact_name || github.event.inputs.artifact_name }}
+      PKG_FILENAME: ${{ github.event.client_payload.pkg_filename || github.event.inputs.pkg_filename }}
+      PKG: ${{ github.event.client_payload.package_name }}
+      VER: ${{ github.event.client_payload.version }}
+      REPO: ${{ github.repository }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
-      # ROOT CAUSE (confirmed 2026-09-23 via explicit diagnostics in run
-      # 35848974626, after several wrong guesses -- GIT_DISCOVERY_ACROSS_
-      # FILESYSTEM, safe.directory, --repo flags -- that treated the
-      # symptom as a git-config/discovery quirk): archlinux:latest has no
-      # git preinstalled. actions/checkout was the FIRST step, before
-      # "Install build tools" ever ran pacman -S git, so checkout had no
-      # git binary to clone with and silently fell back to downloading a
-      # tarball via the REST API instead -- which has no .git directory
-      # at all. `ls -la .git` in the diagnostic run: "No such file or
-      # directory". Every later git/gh command that depended on being in
-      # a real checkout was doomed from this first step, not from
-      # anything about ownership or filesystem boundaries. Installing git
-      # before checkout runs is what actually fixes it -- the discovery/
-      # ownership env vars and flags added along the way are harmless but
-      # were treating a different problem than the real one.
+      # archlinux:latest has no git, and actions/checkout without git falls back to a tarball with no .git
+      # (found 2026-09-23). Install the tools before checkout.
       - name: Install build tools
         run: |
           pacman-key --init
@@ -57,319 +85,155 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Resolve inputs
-        id: inputs
+      - name: Check the inputs
+        run: bash scripts/validate-publish-inputs.sh
+
+      - name: Check the source run
+        run: bash scripts/verify-source-run.sh
+
+      - name: Download the package(s) from the run's artifacts
         run: |
-          if [ "${{ github.event_name }}" = "repository_dispatch" ]; then
-            PKG="${{ github.event.client_payload.package_name }}"
-            VER="${{ github.event.client_payload.version }}"
-            RUN_ID="${{ github.event.client_payload.run_id }}"
-            CH="${{ github.event.client_payload.channel || 'stable' }}"
-            SRC_REPO="${{ github.event.client_payload.source_repo }}"
-          else
-            PKG="${{ github.event.inputs.package_name }}"
-            VER="${{ github.event.inputs.version }}"
-            RUN_ID=""
-            CH="${{ github.event.inputs.channel }}"
-            SRC_REPO="Zohaib8090/zohara-settings"
-          fi
-          echo "package=$PKG" >> "$GITHUB_OUTPUT"
-          echo "version=$VER" >> "$GITHUB_OUTPUT"
-          echo "channel=$CH" >> "$GITHUB_OUTPUT"
-          echo "run_id=$RUN_ID" >> "$GITHUB_OUTPUT"
-          echo "source_repo=$SRC_REPO" >> "$GITHUB_OUTPUT"
-          echo "::notice::Publishing $PKG $VER to channel $CH"
-
-      - name: Determine release tag
-        id: release_info
-        run: |
-          CH="${{ steps.inputs.outputs.channel }}"
-          if [ "$CH" = "stable" ]; then
-            TAG="stable"
-          else
-            TAG="channel-$CH"
-          fi
-          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-
-      - name: Download the .pkg.tar.zst from artifact
-        id: download
-        env:
-          RUN_ID: ${{ steps.inputs.outputs.run_id }}
-          SRC_REPO: ${{ steps.inputs.outputs.source_repo }}
-          ARTIFACT_NAME: ${{ github.event.client_payload.artifact_name }}
-          PKG_FILENAME_HINT: ${{ github.event.client_payload.pkg_filename }}
-          # Verified working (run 35847279565, 2026-09-23): the default
-          # GITHUB_TOKEN, though nominally scoped to this repo, is enough
-          # to read a *public* repo's workflow-run artifacts cross-repo --
-          # unlike writes, GitHub doesn't gate reading public Actions data
-          # behind per-repo token scoping. zohara-settings/zohara-apps are
-          # both public, so this works with no extra secret. An earlier
-          # version of this step required a new SOURCE_REPO_TOKEN PAT,
-          # which was unnecessary and untested; if any source repo is ever
-          # made private, that assumption breaks and a PAT would be needed
-          # again.
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          if [ -z "$RUN_ID" ]; then
-            echo "::error::No run_id provided, cannot download artifact"
-            exit 1
-          fi
-
-          echo "Downloading artifact from run $RUN_ID in $SRC_REPO..."
-
+          set -euo pipefail
+          mkdir -p /tmp/artifact incoming
+          # The default GITHUB_TOKEN can read the Actions artifacts of public repositories, which the allowed
+          # source repositories are (verified 2026-09-23). If one is ever made private, a token is needed.
           if [ -n "$ARTIFACT_NAME" ]; then
-            # Fetch only the named artifact, not every artifact the run
-            # produced -- a source repo whose run uploads more than one
-            # .pkg.tar.zst (zohara-apps: all four crates in one artifact)
-            # would otherwise leave which package ends up published to
-            # pure luck ("head -1" of whatever `find` happens to list
-            # first), regardless of which package_name was dispatched.
-            gh run download "$RUN_ID" --repo "$SRC_REPO" --name "$ARTIFACT_NAME" --dir /tmp || {
-              echo "::error::Failed to download artifact '$ARTIFACT_NAME' from run $RUN_ID"
-              exit 1
-            }
+            gh run download "$RUN_ID" --repo "$SRC_REPO" --name "$ARTIFACT_NAME" --dir /tmp/artifact
           else
-            gh run download "$RUN_ID" --repo "$SRC_REPO" --dir /tmp || {
-              echo "::error::Failed to download artifacts from run $RUN_ID"
-              exit 1
-            }
+            gh run download "$RUN_ID" --repo "$SRC_REPO" --dir /tmp/artifact
           fi
-
-          # Find the .pkg.tar.zst file. If the dispatch told us the exact
-          # filename to expect (pkg_filename -- always set when
-          # artifact_name is, since both come from the same multi-package
-          # build), require that one specifically instead of "whichever
-          # sorts first".
-          if [ -n "$PKG_FILENAME_HINT" ]; then
-            PKG_FILE=$(find /tmp -name "$PKG_FILENAME_HINT" -type f | head -1)
+          if [ -n "$PKG_FILENAME" ]; then
+            find /tmp/artifact -type f -name "$PKG_FILENAME" > /tmp/found.txt
           else
-            PKG_FILE=$(find /tmp -name "*.pkg.tar.zst" -type f | head -1)
+            find /tmp/artifact -type f -name '*.pkg.tar.zst' | sort > /tmp/found.txt
           fi
+          [ -s /tmp/found.txt ] || { echo "::error::no matching .pkg.tar.zst in the run's artifacts"; ls -laR /tmp/artifact; exit 1; }
+          : > published.tsv
+          while read -r f; do
+            size=$(stat -c%s "$f")
+            [ "$size" -ge 1000 ] || { echo "::error::$(basename "$f") is too small ($size bytes)"; exit 1; }
+            read -r name ver < <(bash scripts/read-pkginfo.sh "$f")
+            # If the request named a package or version, the file must agree.
+            if [ -n "$PKG" ] && [ "$(wc -l < /tmp/found.txt)" = 1 ] && [ "$name" != "$PKG" ]; then
+              echo "::error::the request says package '$PKG' but the file is '$name'"; exit 1
+            fi
+            if [ -n "$VER" ] && [ "$(wc -l < /tmp/found.txt)" = 1 ] && [ "${ver%-*}" != "$VER" ]; then
+              echo "::error::the request says version '$VER' but the file is '${ver%-*}'"; exit 1
+            fi
+            # Keep the real file name: the database records it and pacman downloads exactly that name.
+            base=$(basename "$f")
+            cp "$f" "incoming/$base"
+            printf '%s\t%s\t%s\n' "$base" "$name" "${ver%-*}" >> published.tsv
+            echo "found $name ${ver%-*} ($size bytes) -> $base"
+          done < /tmp/found.txt
+          echo "::notice::Publishing $(wc -l < published.tsv) package(s) to $CHANNEL"
 
-          if [ -z "$PKG_FILE" ]; then
-            echo "::error::No matching .pkg.tar.zst found in downloaded artifacts"
-            ls -la /tmp
-            exit 1
-          fi
-
-          # Keep the real filename (not a generic "package.pkg.tar.zst").
-          # repo-add records this exact name inside zohara.db, and pacman
-          # fetches "<Server>/<that name>" to install it -- a renamed-on-
-          # upload package would 404 the moment a client tried to install
-          # it. It also has to survive multiple packages publishing to the
-          # same release without clobbering each other.
-          PKG_FILENAME="$(basename "$PKG_FILE")"
-          cp "$PKG_FILE" "$PKG_FILENAME"
-          echo "pkg_filename=$PKG_FILENAME" >> "$GITHUB_OUTPUT"
-
-          # Validate file
-          FILE_SIZE=$(stat -c%s "$PKG_FILENAME" 2>/dev/null || stat -f%z "$PKG_FILENAME")
-          if [ "$FILE_SIZE" -lt 1000 ]; then
-            echo "::error::Package file too small ($FILE_SIZE bytes)"
-            exit 1
-          fi
-
-          echo "✓ Downloaded package ($FILE_SIZE bytes)"
-          ls -lh "$PKG_FILENAME"
-          tar -tf "$PKG_FILENAME" | head -10
-
-      - name: Get or create channel release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REPO: ${{ github.repository }}
-          TAG: ${{ steps.release_info.outputs.tag }}
-          CHANNEL: ${{ steps.inputs.outputs.channel }}
+      - name: Get or create the channel release
         run: |
-          REL_ID=$(gh release view "$TAG" --repo "$REPO" --json id -q '.id' 2>/dev/null || true)
-          if [ -z "$REL_ID" ]; then
+          set -euo pipefail
+          if [ "$CHANNEL" = "stable" ]; then TAG=stable; else TAG="channel-$CHANNEL"; fi
+          echo "TAG=$TAG" >> "$GITHUB_ENV"
+          if ! gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
             PRE=$([ "$CHANNEL" != "stable" ] && echo "--prerelease" || echo "")
-            gh release create "$TAG" \
-              --repo "$REPO" \
-              --title "Zohara Packages — $CHANNEL" \
-              --notes "Auto-managed Arch package repository for the **$CHANNEL** channel." \
-              $PRE
-            echo "✓ Created release $TAG"
-          else
-            echo "✓ Release $TAG already exists"
+            gh release create "$TAG" --repo "$REPO" --title "Zohara Packages — $CHANNEL" \
+              --notes "Auto-managed Arch package repository for the **$CHANNEL** channel." $PRE \
+              || gh release view "$TAG" --repo "$REPO" >/dev/null   # another run may have created it first
+            echo "created release $TAG"
           fi
 
-      - name: Download every existing asset from the release
-        env:
-          # This step had NO GH_TOKEN at all before -- gh silently fell
-          # back to whatever ambient auth (usually none) the container
-          # had, `gh release download` failed every time, and the `2>/dev/null
-          # || ...` swallowed it into "this is the first publish" on
-          # every single run. Combined with the missing --repo above,
-          # this step could never have actually downloaded anything.
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REPO: ${{ github.repository }}
-          TAG: ${{ steps.release_info.outputs.tag }}
-          CHANNEL: ${{ steps.inputs.outputs.channel }}
+      - name: Merge into the channel database, upload, and check it stuck
         run: |
-          mkdir -p repo
-          # Pull down the current db AND every previously published package,
-          # not just zohara.db. repo-add only ever sees the .pkg.tar.zst
-          # files sitting next to the db it's given -- it does not read the
-          # db's own file list to fetch anything -- so skipping this step
-          # (the previous version of this workflow did) meant every publish
-          # replaced the whole repo with just the one package being added.
-          if gh release download "$TAG" --repo "$REPO" --dir repo 2>/dev/null; then
-            echo "✓ Downloaded existing release assets:"
-            ls -la repo
-          else
-            echo "ℹ No existing release assets; this is the first publish to $TAG"
-          fi
-          # Old db copies may exist under other names from before this
-          # workflow was fixed (zohara.db.tar.zst from zohara-hub's
-          # publisher, which also uses the wrong compression extension for
-          # what pacman.conf's [zohara] section expects -- Server + "/zohara.db",
-          # no suffix). Drop them: repo-add below rebuilds zohara.db.tar.gz
-          # from every *.pkg.tar.zst file actually in repo/, which makes the
-          # rebuild correct regardless of what any previous db said.
-          rm -f repo/zohara.db repo/zohara.db.tar.gz repo/zohara.db.tar.zst \
-                repo/zohara.db.tar.xz repo/zohara.files* repo/*.sig
-          # Same for the channel-named copies made below (zohara-stable.db, ...).
-          rm -f "repo/zohara-$CHANNEL.db" "repo/zohara-$CHANNEL.db.tar.gz" \
-                "repo/zohara-$CHANNEL.files" "repo/zohara-$CHANNEL.files.tar.gz"
-
-      - name: Run repo-add to merge the new package
-        env:
-          PKG_FILENAME: ${{ steps.download.outputs.pkg_filename }}
-          CHANNEL: ${{ steps.inputs.outputs.channel }}
-        run: |
-          cp "$PKG_FILENAME" "repo/$PKG_FILENAME"
-          cd repo
-          # Rebuilds the db from every package actually present, not just
-          # the one just downloaded -- see the previous step for why a db
-          # merge that only looked at one file at a time kept losing every
-          # other package that had ever been published to this channel.
-          shopt -s nullglob
-          repo-add zohara.db.tar.gz ./*.pkg.tar.zst
-          # repo-add creating a brand-new db (first publish to a channel)
-          # also creates zohara.db as a symlink -> zohara.db.tar.gz itself
-          # (confirmed: run 35847890269 failed here with "cp:
-          # 'zohara.db.tar.gz' and 'zohara.db' are the same file"). `rm -f`
-          # first so this is a real regular-file copy either way -- gh
-          # release upload uploads a symlink's target transparently, so the
-          # asset content would have been fine, but a stray symlink among
-          # the uploaded files is fragile for no benefit.
-          rm -f zohara.db
-          cp zohara.db.tar.gz zohara.db
-          # pacman names the file it downloads after the repo SECTION in
-          # /etc/pacman.conf: [zohara-stable] fetches "<Server>/zohara-stable.db".
-          # Installed systems have [zohara-stable] / [zohara-beta] / [zohara-alpha]
-          # (customize_airootfs.sh, zohara-channel), so a release that only had
-          # zohara.db made every `pacman -Sy` fail with a 404 and blocked all system
-          # updates (found in a VM, 2026-09-30). Keep zohara.db too: zohara-channel
-          # probes it and older setups use a [zohara] section.
-          for ext in db files; do
-            [ -e "zohara.$ext.tar.gz" ] || continue
-            cp -L "zohara.$ext.tar.gz" "zohara-$CHANNEL.$ext.tar.gz"
-            cp -L "zohara.$ext.tar.gz" "zohara-$CHANNEL.$ext"
+          set -euo pipefail
+          # pacman fetches "<section name>.db": [zohara-stable] asks for zohara-stable.db. Every publish therefore
+          # uploads the database under zohara.db AND zohara-$CHANNEL.db (plus .files copies). A release with only
+          # zohara.db made `pacman -Sy` fail with a 404 on every installed system (found 2026-09-30).
+          attempt=1
+          while :; do
+            rm -rf repo check; mkdir repo check
+            gh release download "$TAG" --repo "$REPO" --dir repo 2>/dev/null || echo "no existing assets: first publish to $TAG"
+            # repo-add only sees the .pkg.tar.zst files next to the database it builds, so the database is rebuilt
+            # from every package in the release, not only the new ones. Stale database copies go first.
+            rm -f repo/zohara.db repo/zohara.db.tar.gz repo/zohara.db.tar.zst repo/zohara.db.tar.xz repo/zohara.files* repo/*.sig \
+                  "repo/zohara-$CHANNEL.db" "repo/zohara-$CHANNEL.db.tar.gz" "repo/zohara-$CHANNEL.files" "repo/zohara-$CHANNEL.files.tar.gz"
+            cp incoming/*.pkg.tar.zst repo/
+            ( cd repo
+              shopt -s nullglob
+              # -n: when two versions of one package are present, keep the newer one
+              repo-add -n zohara.db.tar.gz ./*.pkg.tar.zst
+              rm -f zohara.db zohara.files
+              cp zohara.db.tar.gz zohara.db
+              for ext in db files; do
+                [ -e "zohara.$ext.tar.gz" ] || continue
+                cp -L "zohara.$ext.tar.gz" "zohara-$CHANNEL.$ext.tar.gz"
+                cp -L "zohara.$ext.tar.gz" "zohara-$CHANNEL.$ext"
+              done )
+            for stale in zohara.db.tar.zst zohara.db.tar.xz; do
+              gh release delete-asset "$TAG" "$stale" --repo "$REPO" -y 2>/dev/null || true
+            done
+            # --clobber can hit a transient race on a republish; retry once.
+            ( cd repo
+              gh release upload "$TAG" ./* --repo "$REPO" --clobber || { echo "::warning::upload failed, retrying once"; sleep 5; gh release upload "$TAG" ./* --repo "$REPO" --clobber; } )
+            # Did our packages survive? Another run may have uploaded its own database a moment after ours.
+            gh release download "$TAG" --repo "$REPO" --pattern "zohara-$CHANNEL.db" --dir check --clobber
+            missing=0
+            while IFS=$'\t' read -r base name ver; do
+              entry="${base%-*.pkg.tar.zst}"      # zohara-voice-1.9.4-1-x86_64.pkg.tar.zst -> zohara-voice-1.9.4-1
+              if ! tar -tzf "check/zohara-$CHANNEL.db" | grep -qx "$entry/"; then missing=1; echo "not in the database yet: $entry"; fi
+            done < published.tsv
+            [ "$missing" = 0 ] && break
+            [ "$attempt" -lt 6 ] || { echo "::error::the database still lacks our package(s) after $attempt tries"; exit 1; }
+            attempt=$((attempt+1)); echo "another publish overwrote the database; merging again (try $attempt)"; sleep $((RANDOM % 10 + 5))
           done
-          echo "✓ repo-add completed"
-          echo "--- Package database now contains ---"
-          tar -tf zohara.db | grep -v '/$' | grep -v '/desc$\|/files$' || true
+          echo "--- $CHANNEL database now lists ---"
+          tar -tzf "check/zohara-$CHANNEL.db" | grep -v '/desc$\|/files$' | sed 's#/$##' | sort
 
-      - name: Upload updated files to release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REPO: ${{ github.repository }}
-          TAG: ${{ steps.release_info.outputs.tag }}
+      - name: Update the Store catalog (apps.json), stable only
+        if: env.CHANNEL == 'stable'
         run: |
-          # Delete stray db assets under names this workflow doesn't
-          # produce (e.g. zohara.db.tar.zst, left by an older/other
-          # publisher) so pacman can't ever fetch a stale one by accident.
-          for stale in zohara.db.tar.zst zohara.db.tar.xz; do
-            gh release delete-asset "$TAG" "$stale" --repo "$REPO" -y 2>/dev/null || true
-          done
-          cd repo
-          # --clobber has an internal race (confirmed, run 35848239773: a
-          # republish to the same tag 404'd deleting an asset id gh's own
-          # --clobber had just listed). A from-scratch delete-then-plain-
-          # upload was tried as a fix but is worse: `gh release
-          # delete-asset -y` failed silently under `2>/dev/null || true`
-          # (confirmed, run 35848546972 -- "asset under the same name
-          # already exists" on the immediately following plain upload, so
-          # the deletes never actually took), and there's no reason to
-          # trust that pattern once removed. Simplest correct fix: keep
-          # --clobber (it works -- every run through this workflow except
-          # the one that hit the race has used it successfully) and retry
-          # once on failure, since the underlying issue is a transient
-          # race, not something this workflow's own inputs control.
-          if ! gh release upload "$TAG" ./* --repo "$REPO" --clobber; then
-            echo "::warning::upload failed, retrying once after a short delay (see commit message for why)"
-            sleep 5
-            gh release upload "$TAG" ./* --repo "$REPO" --clobber
-          fi
-          echo "✓ Uploaded database and all packages to release"
-
-      - name: Patch apps.json with the new package version
-        env:
-          PKG: ${{ steps.inputs.outputs.package }}
-          VER: ${{ steps.inputs.outputs.version }}
-          TAG: ${{ steps.release_info.outputs.tag }}
-          PKG_FILENAME: ${{ steps.download.outputs.pkg_filename }}
-        run: |
+          set -euo pipefail
           today=$(date -u +%F)
-          url="https://github.com/Zohaib8090/zohara-packages/releases/download/${TAG}/${PKG_FILENAME}"
-          jq --arg pkg "$PKG" --arg ver "$VER" --arg url "$url" --arg today "$today" '
-            def ventry: {version: $ver, release_date: $today, download_url: $url,
-                         changelog: ("Auto-published from " + $pkg + " v" + $ver)};
-            if any(.apps[]; .id == $pkg or .package == $pkg) then
-              .apps |= map(
-                if .id == $pkg or .package == $pkg then
-                  .current_version = $ver
-                  | if any(.versions[]; .version == $ver) then
-                      .versions |= map(if .version == $ver
-                                       then .release_date = $today | .download_url = $url
-                                       else . end)
-                    else
-                      .versions = ([ventry] + .versions)[:10]
-                    end
-                else . end)
-            else
-              .apps += [{
-                id: $pkg,
-                name: ($pkg | gsub("-"; " ")),
-                publisher: "Zohara OS Team",
-                description: ($pkg + " — published via the Zohara Packages channel."),
-                category: "System",
-                icon_url: ("https://raw.githubusercontent.com/Zohaib8090/" + $pkg + "/main/data/icons/scalable/apps/" + $pkg + ".svg"),
-                type: "pacman",
-                package: $pkg,
-                current_version: $ver,
-                versions: [ventry]
-              }]
-            end' apps.json > apps.json.new
-          mv apps.json.new apps.json
-          echo "✓ Updated apps.json: $PKG -> $VER"
-
-      - name: Commit and push apps.json
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REPO: ${{ github.repository }}
-          PKG: ${{ steps.inputs.outputs.package }}
-          VER: ${{ steps.inputs.outputs.version }}
-        run: |
-          # Uses the Contents API instead of `git commit`+`git push`.
-          # Every attempt to make plain git work in this container job
-          # failed identically ("fatal: not in a git directory") across
-          # five different theories and fixes -- container-mount
-          # discovery, safe.directory, and finally installing git before
-          # actions/checkout runs (confirmed via explicit diagnostics that
-          # each one addressed a real-looking but wrong cause; even with
-          # git genuinely present before checkout, run 35849155779 hit
-          # the exact same error). The API needs no local .git at all, so
-          # it sidesteps whatever is actually going on with checkout in
-          # this container rather than chasing it further. Same approach
-          # already proven working in zohara-hub's update_apps_json.
-          CURRENT_SHA=$(gh api "repos/$REPO/contents/apps.json" -q .sha)
-          NEW_CONTENT_B64=$(base64 -w0 apps.json)
-          gh api "repos/$REPO/contents/apps.json" \
-            --method PUT \
-            -f message="apps: bump $PKG to $VER" \
-            -f content="$NEW_CONTENT_B64" \
-            -f sha="$CURRENT_SHA" \
-            > /dev/null
-          echo "✓ Pushed apps.json via Contents API"
+          for attempt in 1 2 3 4; do
+            # Start from the current file every time, so two publishes cannot overwrite each other's change.
+            gh api "repos/$REPO/contents/apps.json" > apps.meta.json
+            sha=$(jq -r .sha apps.meta.json)
+            jq -r .content apps.meta.json | base64 -d > apps.json
+            while IFS=$'\t' read -r base name ver; do
+              url="https://github.com/$REPO/releases/download/$TAG/$base"
+              jq --arg pkg "$name" --arg ver "$ver" --arg url "$url" --arg today "$today" '
+                def ventry: {version: $ver, release_date: $today, download_url: $url,
+                             changelog: ("Auto-published from " + $pkg + " v" + $ver)};
+                if any(.apps[]; .id == $pkg or .package == $pkg) then
+                  .apps |= map(
+                    if .id == $pkg or .package == $pkg then
+                      .current_version = $ver
+                      | if any(.versions[]; .version == $ver) then
+                          .versions |= map(if .version == $ver then .release_date = $today | .download_url = $url else . end)
+                        else
+                          .versions = ([ventry] + .versions)[:10]
+                        end
+                    else . end)
+                else
+                  .apps += [{
+                    id: $pkg,
+                    name: ($pkg | gsub("-"; " ")),
+                    publisher: "Zohara OS Team",
+                    description: ($pkg + " — published via the Zohara Packages channel."),
+                    category: "System",
+                    icon_url: ("https://raw.githubusercontent.com/Zohaib8090/" + $pkg + "/main/data/icons/scalable/apps/" + $pkg + ".svg"),
+                    type: "pacman",
+                    package: $pkg,
+                    current_version: $ver,
+                    versions: [ventry]
+                  }]
+                end' apps.json > apps.json.new
+              mv apps.json.new apps.json
+              echo "apps.json: $name -> $ver"
+            done < published.tsv
+            msg="apps: bump $(cut -f2,3 published.tsv | tr '\t' ' ' | paste -sd, -)"
+            # The Contents API needs no local .git (plain git failed in this container; see git history).
+            if gh api "repos/$REPO/contents/apps.json" --method PUT -f message="$msg" -f content="$(base64 -w0 apps.json)" -f sha="$sha" >/dev/null; then
+              echo "pushed apps.json"; exit 0
+            fi
+            echo "apps.json changed under us; trying again ($attempt)"; sleep $((RANDOM % 8 + 3))
+          done
+          echo "::error::could not update apps.json after 4 tries"; exit 1
