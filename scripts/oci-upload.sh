@@ -19,6 +19,7 @@ set -euo pipefail
 
 prefix="${1:?usage: oci-upload.sh PREFIX DIR}"; dir="${2:?usage: oci-upload.sh PREFIX DIR}"
 : "${OCI_PACKAGES_PAR:?OCI_PACKAGES_PAR is not set}"; : "${OCI_PUBLIC_BASE:?OCI_PUBLIC_BASE is not set}"
+OCI_PACKAGES_PAR="$(printf %s "$OCI_PACKAGES_PAR" | tr -d "[:space:]")"; OCI_PUBLIC_BASE="$(printf %s "$OCI_PUBLIC_BASE" | tr -d "[:space:]")"  # a pasted secret may end in a newline
 : "${CHANNEL:?CHANNEL is not set}"
 [[ "$OCI_PACKAGES_PAR" == */o/ && "$OCI_PUBLIC_BASE" == */o/ ]] || { echo "::error::both addresses must end in /o/"; exit 1; }
 [[ "$prefix" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "::error::bad prefix '$prefix'"; exit 1; }
