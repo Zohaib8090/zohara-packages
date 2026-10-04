@@ -24,6 +24,10 @@ t "pkg file not pkg"               1 V $good PKG_FILENAME=evil.sh
 t "pkg file with path"             1 V $good PKG_FILENAME=../a.pkg.tar.zst
 t "pkg name shell chars"           1 V $good 'PKG=a$(id)'
 t "version shell chars"            1 V $good 'VER=1;id'
+t "iso: good"                      0 V KIND=iso SRC_REPO=Zohaib8090/zohara RUN_ID=36693081023
+t "iso: wrong repo"                1 V KIND=iso SRC_REPO=Zohaib8090/zohara-settings RUN_ID=1
+t "iso: other owner"               1 V KIND=iso SRC_REPO=attacker/zohara RUN_ID=1
+t "iso: run id injection"          1 V KIND=iso SRC_REPO=Zohaib8090/zohara 'RUN_ID=1 && id'
 if [ -n "${1:-}" ]; then
   out="$(bash scripts/read-pkginfo.sh "$1" 2>&1)"; [ $? = 0 ] && [[ "$out" =~ ^[a-z0-9@._+-]+\ [A-Za-z0-9._+:~-]+$ ]] && pass=$((pass+1)) || { bad=$((bad+1)); echo "FAIL: read-pkginfo on $1 -> $out"; }
 fi

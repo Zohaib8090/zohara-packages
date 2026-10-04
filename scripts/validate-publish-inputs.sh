@@ -15,6 +15,13 @@ ALLOWED_SOURCES=(Zohaib8090/zohara-settings Zohaib8090/zohara-apps)
 
 fail() { echo "::error::$*"; exit 1; }
 
+# KIND=iso: promoting a finished ISO build from the zohara repository (see promote-iso.yml). No channel there.
+if [ "${KIND:-}" = "iso" ]; then
+  [ "${SRC_REPO:-}" = "Zohaib8090/zohara" ] || fail "an ISO can only be promoted from Zohaib8090/zohara (got '${SRC_REPO:-}')"
+  [[ "${RUN_ID:-}" =~ ^[0-9]+$ ]] || fail "run id must be digits only (got '${RUN_ID:-}')"
+  echo "inputs ok: iso run=$RUN_ID"; exit 0
+fi
+
 case "${CHANNEL:-}" in stable|beta|alpha) ;; *) fail "channel must be stable, beta or alpha (got '${CHANNEL:-}')";; esac
 
 ok=0

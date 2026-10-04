@@ -188,6 +188,19 @@ jobs:
           echo "--- $CHANNEL database now lists ---"
           tar -tzf "check/zohara-$CHANNEL.db" | grep -v '/desc$\|/files$' | sed 's#/$##' | sort
 
+      - name: Mirror to OCI Object Storage (main download location)
+        # GitHub Releases stays the address installed systems use until their pacman.conf is changed; OCI is the
+        # main store. A failure here is reported as a warning and does not block the stable catalog update.
+        continue-on-error: true
+        env:
+          OCI_PACKAGES_PAR: ${{ secrets.OCI_PACKAGES_PAR }}
+          OCI_PUBLIC_BASE: https://objectstorage.ap-mumbai-1.oraclecloud.com/n/bm27e3oxmp04/b/zohara-packages/o/
+        run: |
+          if [ -z "$OCI_PACKAGES_PAR" ]; then
+            echo "::warning::OCI_PACKAGES_PAR is not set; skipping the OCI copy (GitHub Releases still has everything)"; exit 0
+          fi
+          bash scripts/oci-upload.sh "$TAG" repo
+
       - name: Update the Store catalog (apps.json), stable only
         if: env.CHANNEL == 'stable'
         run: |

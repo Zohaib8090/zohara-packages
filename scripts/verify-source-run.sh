@@ -11,6 +11,15 @@ check() { jq -r "$1" <<<"$run_json"; }
 
 [ "$(check .status)" = completed ] && [ "$(check .conclusion)" = success ] || fail "run $RUN_ID did not finish successfully"
 event="$(check .event)"
+if [ "${KIND:-}" = "iso" ]; then
+  # The ISO build also starts from repository_dispatch (a new settings build); pull requests never.
+  case "$event" in push|workflow_dispatch|repository_dispatch) ;; *) fail "run $RUN_ID was started by '$event'";; esac
+  [ "$(check .name)" = "Build Zohara OS ISO" ] || fail "run $RUN_ID is '$(check .name)', not an ISO build"
+  [ "$(check .head_branch)" = "master" ] || fail "an ISO can only be promoted from a master build (this one is '$(check .head_branch)')"
+  head_repo="$(check '.head_repository.full_name // ""')"
+  [ "${head_repo,,}" = "${SRC_REPO,,}" ] || fail "run $RUN_ID does not come from $SRC_REPO itself"
+  echo "iso run ok: $SRC_REPO #$RUN_ID ($event on master, $(check .head_sha | cut -c1-7))"; exit 0
+fi
 case "$event" in push|workflow_dispatch) ;; *) fail "run $RUN_ID was started by '$event'; only push or manual runs can be published";; esac
 head_repo="$(check '.head_repository.full_name // ""')"
 [ "${head_repo,,}" = "${SRC_REPO,,}" ] || fail "run $RUN_ID does not come from $SRC_REPO itself (it comes from '$head_repo')"

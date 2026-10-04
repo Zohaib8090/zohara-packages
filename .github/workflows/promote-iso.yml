@@ -1,0 +1,105 @@
+name: Promote ISO
+
+# Copies a finished CI ISO (the "Build Zohara OS ISO" run in Zohaib8090/zohara; GitHub keeps its artifact only 30
+# days) to OCI Object Storage, with a checksum, and checks the public copy byte for byte.
+#
+# Started by "Run workflow" (paste the run id of the ISO build) or by repository_dispatch "iso-promote" with
+# client_payload.run_id (the admin site).
+#
+# Result, in the public bucket zohara-os (ap-mumbai-1):
+#   zohara-os-YYYY.MM.DD-x86_64.iso          the image
+#   zohara-os-YYYY.MM.DD-x86_64.iso.sha256   "<hash>  <file name>", works with `sha256sum -c`
+#   latest.json                              {version, file, sha256, size, url} of the newest promoted ISO
+#
+# The free tier holds 20 GB in total (packages included). A pre-authenticated write address cannot delete, so
+# remove old ISOs by hand in the OCI console when space runs short. SourceForge is a manual mirror
+# (zohara/scripts/upload-iso.sh).
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: 'Run id of a successful "Build Zohara OS ISO" run in Zohaib8090/zohara'
+        required: true
+  repository_dispatch:
+    types: [iso-promote]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: promote-iso
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      KIND: iso
+      SRC_REPO: Zohaib8090/zohara
+      RUN_ID: ${{ github.event.client_payload.run_id || github.event.inputs.run_id }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      OCI_ISO_PAR: ${{ secrets.OCI_ISO_PAR }}
+      OCI_ISO_PUBLIC_BASE: https://objectstorage.ap-mumbai-1.oraclecloud.com/n/bm27e3oxmp04/b/zohara-os/o/
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check the inputs
+        run: bash scripts/validate-publish-inputs.sh
+
+      - name: Check the ISO build run
+        run: bash scripts/verify-source-run.sh
+
+      - name: Make room (the artifact is 3.9 GB and is unpacked next to its zip)
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android /usr/local/share/boost
+          df -h / | tail -1
+
+      - name: Download the ISO artifact
+        run: |
+          set -euo pipefail
+          mkdir -p iso
+          gh run download "$RUN_ID" --repo "$SRC_REPO" --name zohara-os-x86_64 --dir iso
+          mapfile -t isos < <(find iso -type f -name '*.iso')
+          [ "${#isos[@]}" = 1 ] || { echo "::error::expected exactly one .iso in the artifact, found ${#isos[@]}"; ls -laR iso; exit 1; }
+          iso="${isos[0]}"; name="$(basename "$iso")"
+          [[ "$name" =~ ^zohara-os-([0-9]{4}\.[0-9]{2}\.[0-9]{2})-x86_64\.iso$ ]] || { echo "::error::unexpected ISO name: $name"; exit 1; }
+          size="$(stat -c%s "$iso")"
+          [ "$size" -gt 1000000000 ] || { echo "::error::ISO is only $size bytes"; exit 1; }
+          sum="$(sha256sum "$iso" | cut -d' ' -f1)"
+          mv "$iso" "./$name"
+          printf '%s  %s\n' "$sum" "$name" > "$name.sha256"
+          jq -n --arg v "${BASH_REMATCH[1]}" --arg f "$name" --arg h "$sum" --argjson s "$size" --arg u "${OCI_ISO_PUBLIC_BASE}$name" \
+            '{version:$v, file:$f, sha256:$h, size:$s, url:$u}' > latest.json
+          { echo "ISO=$name"; echo "SUM=$sum"; echo "SIZE=$size"; } >> "$GITHUB_ENV"
+          echo "ISO $name, $size bytes, sha256 $sum"
+
+      - name: Upload to OCI
+        run: |
+          set -euo pipefail
+          [ -n "$OCI_ISO_PAR" ] || { echo "::error::the OCI_ISO_PAR secret is not set"; exit 1; }
+          [[ "$OCI_ISO_PAR" == */o/ ]] || { echo "::error::OCI_ISO_PAR must end in /o/"; exit 1; }
+          put() { curl -fsS --retry 3 --retry-delay 10 --retry-all-errors -X PUT --upload-file "$1" -H 'Content-Type: application/octet-stream' "${OCI_ISO_PAR}$2" -o /dev/null; }
+          put "$ISO" "$ISO"
+          put "$ISO.sha256" "$ISO.sha256"
+          # latest.json last: it only ever points at an ISO that is already there.
+          put latest.json latest.json
+
+      - name: Check the public copy byte for byte
+        run: |
+          set -euo pipefail
+          url="${OCI_ISO_PUBLIC_BASE}${ISO}"
+          got="$(curl -sI "$url" | awk 'tolower($1)=="content-length:"{gsub("\r","",$2); print $2+0}')"
+          [ "$got" = "$SIZE" ] || { echo "::error::public size $got, expected $SIZE"; exit 1; }
+          hash="$(curl -fsS --retry 3 "$url" | sha256sum | cut -d' ' -f1)"
+          [ "$hash" = "$SUM" ] || { echo "::error::public hash $hash differs from $SUM"; exit 1; }
+          curl -fsS "${OCI_ISO_PUBLIC_BASE}latest.json" | jq -e --arg f "$ISO" '.file == $f' >/dev/null
+          {
+            echo "### ISO promoted"
+            echo "- file: \`$ISO\` ($SIZE bytes)"
+            echo "- SHA-256: \`$SUM\`"
+            echo "- download: $url"
+            echo "- checksum file: ${url}.sha256"
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "public copy verified"

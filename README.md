@@ -70,6 +70,30 @@ another publish overwrote it, merges again.
 
 Test the helper scripts offline: `bash scripts/test-publish-scripts.sh [some.pkg.tar.zst]`.
 
+## OCI Object Storage (main store) and the ISO
+
+Since phase 3 of `zohara-updates-system/docs/PLAN.md` (written 2026-10-04) every publish also copies the channel's
+files to OCI Object Storage (`scripts/oci-upload.sh`: packages first, database files last, public copy compared
+byte for byte). GitHub Releases is still the address installed systems use, so a failure of the OCI copy is only a
+warning. The step is skipped while the secret below does not exist.
+
+| Secret (repo Settings > Secrets > Actions) | What it is |
+|---|---|
+| `OCI_PACKAGES_PAR` | OCI pre-authenticated request URL that allows object **writes** to the public bucket `zohara-packages` (ends in `/o/`). Expires; renew it. |
+| `OCI_ISO_PAR` | the same kind of URL for the public bucket `zohara-os` (the ISO) |
+
+Public bucket addresses (region `ap-mumbai-1`, namespace `bm27e3oxmp04`):
+`https://objectstorage.ap-mumbai-1.oraclecloud.com/n/bm27e3oxmp04/b/zohara-packages/o/<tag>/<file>` for packages and
+`.../b/zohara-os/o/<file>` for the ISO. A write URL cannot delete: remove old files in the OCI console (the free tier
+holds 20 GB in total).
+
+**Promote ISO** (`.github/workflows/promote-iso.yml`): Actions > Promote ISO > Run workflow, with the run id of a
+successful "Build Zohara OS ISO" run in `Zohaib8090/zohara` (CI keeps that artifact only 30 days). It uploads the
+image, a `.sha256` file and `latest.json` to `zohara-os`, then downloads the public copy and compares the hash.
+SourceForge stays a manual mirror (`zohara/scripts/upload-iso.sh`).
+
+Offline tests: `bash scripts/test-oci-upload.sh` (a local fake bucket, `scripts/fake-oci-server.py`).
+
 ## Files in this repo
 
 - `apps.json` — catalog consumed by the Zohara Software Store. Auto-patched
