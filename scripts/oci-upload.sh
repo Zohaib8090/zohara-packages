@@ -38,8 +38,14 @@ for f in "$dir"/*.pkg.tar.zst; do
   if [ "$(remote_size "$name")" = "$size" ]; then skipped=$((skipped+1)); continue; fi
   echo "uploading $name ($size bytes)"; put "$f" "$name"; up=$((up+1))
 done
+# Signatures are tiny and must always match their package, so they are always sent.
+for f in "$dir"/*.pkg.tar.zst.sig; do
+  put "$f" "$(basename "$f")"; up=$((up+1))
+done
 for name in "zohara-$CHANNEL.db.tar.gz" "zohara-$CHANNEL.files.tar.gz" "zohara-$CHANNEL.files" "zohara.db.tar.gz" "zohara.files.tar.gz" "zohara.files" \
-            "zohara-$CHANNEL.db" "zohara.db"; do
+            "zohara-$CHANNEL.db" "zohara.db" \
+            "zohara-$CHANNEL.db.sig" "zohara.db.sig" "zohara-$CHANNEL.db.tar.gz.sig" "zohara.db.tar.gz.sig" \
+            "zohara-$CHANNEL.files.sig" "zohara.files.sig" "zohara-$CHANNEL.files.tar.gz.sig" "zohara.files.tar.gz.sig"; do
   [ -f "$dir/$name" ] || continue
   echo "uploading $name"; put "$dir/$name" "$name"; up=$((up+1))
 done
