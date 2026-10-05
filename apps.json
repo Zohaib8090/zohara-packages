@@ -2,7 +2,7 @@
   "apps": [
     {
       "category": "System",
-      "current_version": "0.1.0.202610042329",
+      "current_version": "0.1.0.202610050802",
       "description": "System settings application for Zohara OS",
       "icon_url": "https://raw.githubusercontent.com/Zohaib8090/zohara-settings/main/data/icons/scalable/apps/zohara-settings.svg",
       "id": "zohara-settings",
@@ -11,6 +11,12 @@
       "publisher": "Zohara OS Team",
       "type": "pacman",
       "versions": [
+        {
+          "version": "0.1.0.202610050802",
+          "release_date": "2026-10-05",
+          "download_url": "https://github.com/Zohaib8090/zohara-packages/releases/download/stable/zohara-settings-0.1.0.202610050802-1-x86_64.pkg.tar.zst",
+          "changelog": "Auto-published from zohara-settings v0.1.0.202610050802"
+        },
         {
           "version": "0.1.0.202610042329",
           "release_date": "2026-10-04",
@@ -64,12 +70,6 @@
           "release_date": "2026-09-25",
           "download_url": "https://github.com/Zohaib8090/zohara-packages/releases/download/stable/zohara-settings-0.1.0.202609251900-1-x86_64.pkg.tar.zst",
           "changelog": "Auto-published from zohara-settings v0.1.0.202609251900"
-        },
-        {
-          "changelog": "Initial release with Network, Bluetooth, Display, Sound, and Power settings",
-          "download_url": "https://github.com/Zohaib8090/zohara-packages/releases/download/stable/zohara-settings-0.1.0-1-x86_64.pkg.tar.zst",
-          "release_date": "2026-09-24",
-          "version": "0.1.0"
         }
       ]
     },
