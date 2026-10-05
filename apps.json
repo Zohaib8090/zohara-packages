@@ -75,7 +75,7 @@
     },
     {
       "category": "System",
-      "current_version": "0.1.0.202609271645",
+      "current_version": "0.1.0.202610050836",
       "description": "App store and update center for Zohara OS.",
       "icon_url": "https://raw.githubusercontent.com/Zohaib8090/zohara/master/zohara-store-rs/data/zohara-store.svg",
       "id": "zohara-store",
@@ -84,6 +84,12 @@
       "publisher": "Zohara OS Team",
       "type": "pacman",
       "versions": [
+        {
+          "version": "0.1.0.202610050836",
+          "release_date": "2026-10-05",
+          "download_url": "https://github.com/Zohaib8090/zohara-packages/releases/download/stable/zohara-store-0.1.0.202610050836-1-x86_64.pkg.tar.zst",
+          "changelog": "Auto-published from zohara-store v0.1.0.202610050836"
+        },
         {
           "version": "0.1.0.202609271645",
           "release_date": "2026-09-27",
