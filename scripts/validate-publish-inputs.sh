@@ -11,7 +11,9 @@
 #   PKG, VER       optional (the package name and version are read from the package itself; if given they must match)
 set -euo pipefail
 
-ALLOWED_SOURCES=(Zohaib8090/zohara-settings Zohaib8090/zohara-apps)
+# Zohaib8090/zohara also builds the Store, Snapshots, Voice and Welcome packages; verify-source-run.sh then insists
+# the run is one of those package workflows on master (the same repo also builds the ISO).
+ALLOWED_SOURCES=(Zohaib8090/zohara-settings Zohaib8090/zohara-apps Zohaib8090/zohara)
 
 fail() { echo "::error::$*"; exit 1; }
 

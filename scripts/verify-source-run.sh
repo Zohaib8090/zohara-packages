@@ -24,8 +24,18 @@ case "$event" in push|workflow_dispatch) ;; *) fail "run $RUN_ID was started by 
 head_repo="$(check '.head_repository.full_name // ""')"
 [ "${head_repo,,}" = "${SRC_REPO,,}" ] || fail "run $RUN_ID does not come from $SRC_REPO itself (it comes from '$head_repo')"
 branch="$(check .head_branch)"
-case "$CHANNEL:$branch" in
-  stable:main|beta:beta|beta:main|alpha:main|alpha:beta) ;;
-  *) fail "a run from branch '$branch' cannot be published to the $CHANNEL channel";;
-esac
+if [ "${SRC_REPO,,}" = "zohaib8090/zohara" ]; then
+  # The main repository: only its package workflows count (its ISO builds are promoted by promote-iso.yml), and
+  # its default branch is master.
+  case "$(check .name)" in
+    "Build & Publish Zohara Store"|"Build & Publish Zohara Snapshots"|"Build & Publish Zohara Voice"|"Build & Publish Zohara Welcome") ;;
+    *) fail "run $RUN_ID is '$(check .name)', not one of the package builds";;
+  esac
+  [ "$branch" = master ] || fail "a run from branch '$branch' cannot be published (packages come from master here)"
+else
+  case "$CHANNEL:$branch" in
+    stable:main|beta:beta|beta:main|alpha:main|alpha:beta) ;;
+    *) fail "a run from branch '$branch' cannot be published to the $CHANNEL channel";;
+  esac
+fi
 echo "run ok: $SRC_REPO #$RUN_ID ($event on $branch, $(check .head_sha | cut -c1-7))"
