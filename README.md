@@ -94,6 +94,13 @@ SourceForge stays a manual mirror (`zohara/scripts/upload-iso.sh`).
 
 Offline tests: `bash scripts/test-oci-upload.sh` (a local fake bucket, `scripts/fake-oci-server.py`).
 
+## Package signing
+
+Packages and the database can be signed with Zohara's key, and machines made to refuse anything else. The key, the
+rollout order (the key must reach machines **before** signing is switched on) and the tests are in
+[docs/SIGNING.md](docs/SIGNING.md). Status: key made, keyring package published, signing off, machines still accept
+unsigned packages.
+
 ## Files in this repo
 
 - `apps.json` — catalog consumed by the Zohara Software Store. Auto-patched
