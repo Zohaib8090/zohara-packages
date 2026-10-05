@@ -28,7 +28,7 @@ if [ "${SRC_REPO,,}" = "zohaib8090/zohara" ]; then
   # The main repository: only its package workflows count (its ISO builds are promoted by promote-iso.yml), and
   # its default branch is master.
   case "$(check .name)" in
-    "Build & Publish Zohara Store"|"Build & Publish Zohara Snapshots"|"Build & Publish Zohara Voice"|"Build & Publish Zohara Welcome") ;;
+    "Build & Publish Zohara Store"|"Build & Publish Zohara Snapshots"|"Build & Publish Zohara Voice"|"Build & Publish Zohara Welcome"|"Build & Publish Zohara Keyring") ;;
     *) fail "run $RUN_ID is '$(check .name)', not one of the package builds";;
   esac
   [ "$branch" = master ] || fail "a run from branch '$branch' cannot be published (packages come from master here)"
