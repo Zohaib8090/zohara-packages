@@ -33,6 +33,7 @@ on:
         options:
           - Zohaib8090/zohara-settings
           - Zohaib8090/zohara-apps
+          - Zohaib8090/zohara
       run_id:
         description: 'Run id of a successful build in that repository'
         required: true
