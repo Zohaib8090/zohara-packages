@@ -2,7 +2,7 @@
   "apps": [
     {
       "category": "System",
-      "current_version": "0.1.0.202610060741",
+      "current_version": "0.1.0.202610061505",
       "description": "System settings application for Zohara OS",
       "icon_url": "https://raw.githubusercontent.com/Zohaib8090/zohara-settings/main/data/icons/scalable/apps/zohara-settings.svg",
       "id": "zohara-settings",
@@ -11,6 +11,12 @@
       "publisher": "Zohara OS Team",
       "type": "pacman",
       "versions": [
+        {
+          "version": "0.1.0.202610061505",
+          "release_date": "2026-10-06",
+          "download_url": "https://github.com/Zohaib8090/zohara-packages/releases/download/stable/zohara-settings-0.1.0.202610061505-1-x86_64.pkg.tar.zst",
+          "changelog": "Auto-published from zohara-settings v0.1.0.202610061505"
+        },
         {
           "version": "0.1.0.202610060741",
           "release_date": "2026-10-06",
@@ -64,12 +70,6 @@
           "release_date": "2026-09-26",
           "download_url": "https://github.com/Zohaib8090/zohara-packages/releases/download/stable/zohara-settings-0.1.0.202609261923-1-x86_64.pkg.tar.zst",
           "changelog": "Auto-published from zohara-settings v0.1.0.202609261923"
-        },
-        {
-          "version": "0.1.0.202609260201",
-          "release_date": "2026-09-26",
-          "download_url": "https://github.com/Zohaib8090/zohara-packages/releases/download/stable/zohara-settings-0.1.0.202609260201-1-x86_64.pkg.tar.zst",
-          "changelog": "Auto-published from zohara-settings v0.1.0.202609260201"
         }
       ]
     },
