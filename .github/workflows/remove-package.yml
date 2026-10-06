@@ -1,0 +1,89 @@
+name: Remove a package from a channel
+
+# Takes one package out of the ALPHA or BETA channel: deletes its package file(s) from the channel release, rebuilds the
+# database from what is left (scripts/build-repo.sh, the same script a publish uses), checks the package is gone from it,
+# and refreshes the OCI mirror's database. Stable cannot be changed here on purpose: removing something users already
+# have in stable is a deliberate act done by hand.
+#
+# Why it exists: nothing could remove a package from a channel. Two repositories once published the same package name
+# (zohara-welcome, zohara-migrate); the stale one had to be taken out (2026-10-06).
+
+on:
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: 'Channel to remove it from'
+        required: true
+        type: choice
+        options: [alpha, beta]
+      package:
+        description: 'Package name, exactly (for example zohara-migrate)'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  remove:
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:latest
+    env:
+      CHANNEL: ${{ github.event.inputs.channel }}
+      PKG: ${{ github.event.inputs.package }}
+      REPO: ${{ github.repository }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Install build tools
+        run: |
+          pacman-key --init
+          pacman-key --populate archlinux
+          pacman -Syu --noconfirm
+          pacman -S --noconfirm --needed github-cli git base-devel zstd curl jq
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check the inputs
+        run: |
+          set -euo pipefail
+          case "$CHANNEL" in alpha|beta) ;; *) echo "::error::only alpha or beta (got '$CHANNEL')"; exit 1;; esac
+          [[ "$PKG" =~ ^[a-z0-9][a-z0-9+._-]*$ ]] || { echo "::error::'$PKG' is not a plain package name"; exit 1; }
+
+      - name: Remove it and rebuild the database
+        env:
+          ZOHARA_PKG_SIGNING_KEY: ${{ secrets.ZOHARA_PKG_SIGNING_KEY }}
+        run: |
+          set -euo pipefail
+          TAG="channel-$CHANNEL"
+          rm -rf repo check; mkdir repo check
+          gh release download "$TAG" --repo "$REPO" --dir repo
+          : > removed.txt
+          for f in repo/*.pkg.tar.zst; do
+            read -r name _ < <(bash scripts/read-pkginfo.sh "$f")
+            # Exact name from the package's own .PKGINFO: "zohara-voice" must not match "zohara-voice-model".
+            if [ "$name" = "$PKG" ]; then basename "$f" >> removed.txt; fi
+          done
+          [ -s removed.txt ] || { echo "::error::no package named '$PKG' in $TAG"; exit 1; }
+          while read -r b; do
+            echo "removing $b"
+            rm -f "repo/$b" "repo/$b.sig"
+            gh release delete-asset "$TAG" "$b" --repo "$REPO" -y
+            gh release delete-asset "$TAG" "$b.sig" --repo "$REPO" -y 2>/dev/null || true
+          done < removed.txt
+          bash scripts/build-repo.sh repo "$CHANNEL"
+          ( cd repo; gh release upload "$TAG" ./zohara* --repo "$REPO" --clobber )
+          gh release download "$TAG" --repo "$REPO" --pattern "zohara-$CHANNEL.db" --dir check --clobber
+          if tar -tzf "check/zohara-$CHANNEL.db" | grep -q "^$PKG-[0-9]"; then echo "::error::$PKG is still in the database"; exit 1; fi
+          echo "--- $CHANNEL database now lists ---"
+          tar -tzf "check/zohara-$CHANNEL.db" | grep -v '/desc$\|/files$' | sed 's#/$##' | sort
+          echo "TAG=$TAG" >> "$GITHUB_ENV"
+
+      - name: Refresh the OCI mirror
+        continue-on-error: true
+        env:
+          OCI_PACKAGES_PAR: ${{ secrets.OCI_PACKAGES_PAR }}
+          OCI_PUBLIC_BASE: https://objectstorage.ap-mumbai-1.oraclecloud.com/n/bm27e3oxmp04/b/zohara-packages/o/
+        run: |
+          if [ -z "$OCI_PACKAGES_PAR" ]; then echo "::warning::OCI_PACKAGES_PAR is not set; skipping the OCI copy"; exit 0; fi
+          bash scripts/oci-upload.sh "$TAG" repo
