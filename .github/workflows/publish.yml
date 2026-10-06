@@ -64,7 +64,7 @@ jobs:
     env:
       # One place that reads the trigger; every later step uses these as environment variables.
       EVENT: ${{ github.event_name }}
-      CHANNEL: ${{ github.event.client_payload.channel || github.event.inputs.channel || 'stable' }}
+      CHANNEL: ${{ github.event.client_payload.channel || github.event.inputs.channel || 'alpha' }}
       SRC_REPO: ${{ github.event.client_payload.source_repo || github.event.inputs.source_repo }}
       RUN_ID: ${{ github.event.client_payload.run_id || github.event.inputs.run_id }}
       ARTIFACT_NAME: ${{ github.event.client_payload.artifact_name || github.event.inputs.artifact_name }}
