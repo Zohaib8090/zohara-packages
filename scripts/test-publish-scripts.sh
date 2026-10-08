@@ -11,6 +11,7 @@ V() { env -i PATH="$PATH" "$@" bash scripts/validate-publish-inputs.sh; }
 good="CHANNEL=stable SRC_REPO=Zohaib8090/zohara-settings RUN_ID=123"
 t "good stable"                    0 V $good
 t "good alpha apps + hints"        0 V CHANNEL=alpha SRC_REPO=Zohaib8090/zohara-apps RUN_ID=9 ARTIFACT_NAME=zohara-apps-arch PKG_FILENAME=zohara-voice-1.9.4-1-x86_64.pkg.tar.zst PKG=zohara-voice VER=1.9.4
+t "good alpha link"                  0 V CHANNEL=alpha SRC_REPO=Zohaib8090/zohara-link RUN_ID=5
 t "bad channel"                    1 V CHANNEL=prod SRC_REPO=Zohaib8090/zohara-settings RUN_ID=1
 t "empty channel"                  1 V SRC_REPO=Zohaib8090/zohara-settings RUN_ID=1
 t "good: main repo package build"     0 V CHANNEL=stable SRC_REPO=Zohaib8090/zohara RUN_ID=5 ARTIFACT_NAME=zohara-store-arch-x86_64

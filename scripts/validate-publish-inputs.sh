@@ -13,7 +13,7 @@ set -euo pipefail
 
 # Zohaib8090/zohara also builds the Store, Snapshots, Voice and Welcome packages; verify-source-run.sh then insists
 # the run is one of those package workflows on master (the same repo also builds the ISO).
-ALLOWED_SOURCES=(Zohaib8090/zohara-settings Zohaib8090/zohara-apps Zohaib8090/zohara)
+ALLOWED_SOURCES=(Zohaib8090/zohara-settings Zohaib8090/zohara-apps Zohaib8090/zohara Zohaib8090/zohara-link)
 
 fail() { echo "::error::$*"; exit 1; }
 
