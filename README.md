@@ -59,7 +59,7 @@ the other two boxes empty to publish every package in the run's artifact. The ad
 (`zohara-updates-system`) starts the same workflow with the same inputs.
 
 The workflow refuses anything it should not publish, before downloading a byte: a source repository that is not
-on the allowed list (`scripts/validate-publish-inputs.sh`), a run that failed, was started by a pull request, or
+on the allowed list (`scripts/validate-publish-inputs.sh`: `zohara-settings`, `zohara-apps`, `zohara`, and since 2026-10-12 `zohara-link`, whose daemon `zohara-linkd` publishes to alpha from its own repo), a run that failed, was started by a pull request, or
 is on the wrong branch for the channel (`scripts/verify-source-run.sh`). The package name and version come from the
 package file itself (`scripts/read-pkginfo.sh`). `apps.json` (the Store catalog) is changed only by **stable**
 publishes. Packages are not signed yet (`SigLevel = Optional TrustAll` on the installed systems): that is phase 5
