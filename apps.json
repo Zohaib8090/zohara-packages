@@ -148,7 +148,7 @@
     },
     {
       "category": "System",
-      "current_version": "0.1.0",
+      "current_version": "0.1.0.202610171656",
       "description": "Linux-side companion daemon that pairs Zohara OS with the Zohara Link Android app (clipboard sync, file transfer, notifications, remote input).",
       "icon_url": "https://raw.githubusercontent.com/Zohaib8090/zohara-link/main/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png",
       "id": "zohara-linkd",
@@ -157,6 +157,12 @@
       "publisher": "Zohara OS Team",
       "type": "pacman",
       "versions": [
+        {
+          "version": "0.1.0.202610171656",
+          "release_date": "2026-10-21",
+          "download_url": "https://github.com/Zohaib8090/zohara-packages/releases/download/stable/zohara-linkd-0.1.0.202610171656-1-x86_64.pkg.tar.zst",
+          "changelog": "Auto-published from zohara-linkd v0.1.0.202610171656"
+        },
         {
           "changelog": "Rust rewrite: TLS/PIN pairing, mDNS discovery, clipboard sync, file transfer, notification mirroring, remote input.",
           "download_url": "https://github.com/Zohaib8090/zohara-packages/releases/download/stable/zohara-linkd-0.1.0-1-x86_64.pkg.tar.zst",
