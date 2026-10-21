@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Asks GitHub about the source run and refuses anything that should never reach users:
 # a run that did not succeed, was started by a pull request, belongs to another repository, or is on a branch
-# that does not match the channel (main and beta builds can go to any channel; a beta build may hold only part of what is on main).
+# that does not match the channel (builds of main, beta and stable can go to any channel; beta and stable may hold only part of what is on main).
 # Needs GH_TOKEN, SRC_REPO, RUN_ID and CHANNEL.
 set -euo pipefail
 fail() { echo "::error::$*"; exit 1; }
@@ -34,7 +34,7 @@ if [ "${SRC_REPO,,}" = "zohaib8090/zohara" ]; then
   [ "$branch" = master ] || fail "a run from branch '$branch' cannot be published (packages come from master here)"
 else
   case "$CHANNEL:$branch" in
-    stable:main|stable:beta|beta:beta|beta:main|alpha:main|alpha:beta) ;;
+    stable:main|stable:beta|stable:stable|beta:main|beta:beta|beta:stable|alpha:main|alpha:beta|alpha:stable) ;;
     *) fail "a run from branch '$branch' cannot be published to the $CHANNEL channel";;
   esac
 fi
