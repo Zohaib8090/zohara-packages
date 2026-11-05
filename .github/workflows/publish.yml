@@ -167,9 +167,9 @@ jobs:
             for stale in zohara.db.tar.zst zohara.db.tar.xz; do
               gh release delete-asset "$TAG" "$stale" --repo "$REPO" -y 2>/dev/null || true
             done
-            # --clobber can hit a transient race on a republish; retry once.
-            ( cd repo
-              gh release upload "$TAG" ./* --repo "$REPO" --clobber || { echo "::warning::upload failed, retrying once"; sleep 5; gh release upload "$TAG" ./* --repo "$REPO" --clobber; } )
+            # Packages first, a check that they are listed, the databases last (scripts/upload-release.sh): a database
+            # must never name a file that is not in the release (a GitHub 500 mid-upload once did exactly that).
+            bash scripts/upload-release.sh "$TAG" "$REPO" "$CHANNEL" repo incoming
             # Did our packages survive? Another run may have uploaded its own database a moment after ours.
             gh release download "$TAG" --repo "$REPO" --pattern "zohara-$CHANNEL.db" --dir check --clobber
             missing=0
