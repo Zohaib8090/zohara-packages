@@ -39,4 +39,11 @@ ok "only the package was sent" "$(wc -l < "$T/log")" 1
 mk; FAIL_ON=zohara-alpha.db bash scripts/upload-release.sh channel-alpha o/r alpha "$T/repo" "$T/in" >/dev/null 2>&1; ok "failed channel db exits non-zero" "$?" 1
 ok "packages were already up" "$(grep -c pkg.tar.zst "$T/log")" 2
 
+# an older package that the release already lists is not uploaded again
+mk; echo zohara-old-1-1-x86_64.pkg.tar.zst > "$T/assets"; bash scripts/upload-release.sh channel-alpha o/r alpha "$T/repo" "$T/in" >/dev/null 2>&1; ok "run with listed old package exits 0" "$?" 0
+ok "listed old package not re-uploaded" "$(grep -c 'zohara-old' "$T/log")" 0
+ok "new package and databases still uploaded" "$(grep -c 'zohara-new\|db' "$T/log" | awk '{print ($1>=3)}')" 1
+# a package the release does not list yet is still uploaded
+mk; bash scripts/upload-release.sh channel-alpha o/r alpha "$T/repo" "$T/in" >/dev/null 2>&1; ok "unlisted old package is uploaded" "$(grep -c 'zohara-old' "$T/log")" 1
+
 echo "upload-release: $pass passed, $bad failed"; [ "$bad" = 0 ]

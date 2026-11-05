@@ -43,13 +43,19 @@ rest=(); dbs=(); last=()
 for f in "$dir"/*; do
   b="$(basename "$f")"
   case " ${new[*]} " in *" $b "*) continue;; esac
+  # The older packages were downloaded from this very release a moment ago and are byte for byte what is there: uploading
+  # them again only spends the workflow's API quota (187 uploads per publish hit the rate limit on 2026-11-05). Signatures
+  # are the exception: they may have been made again when signing was switched on.
+  case "$b" in
+    *.pkg.tar.zst) grep -qxF "$b" <<<"$listed" && continue;;
+  esac
   case "$b" in
     "zohara-$channel.db"|"zohara-$channel.db.tar.gz"|"zohara-$channel.db.sig"|"zohara-$channel.db.tar.gz.sig") last+=("$b");;
     *.db|*.db.*|*.files|*.files.*) dbs+=("$b");;
     *) rest+=("$b");;
   esac
 done
-echo "2/3 other packages and signatures: ${#rest[@]} file(s)"
+echo "2/3 packages not in the release yet and signatures: ${#rest[@]} file(s)"
 upload "${rest[@]}"
 # 4. the databases: the copies pacman does not read first, the channel's own database last
 echo "3/3 databases"
