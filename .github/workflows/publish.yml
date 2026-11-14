@@ -1,5 +1,8 @@
 name: Publish Zohara Package
 
+# The run title carries the source run id, so poll-agent.yml can see which builds were already sent.
+run-name: ${{ format('Publish {0} run {1} to {2} ({3})', github.event.client_payload.source_repo || github.event.inputs.source_repo, github.event.client_payload.run_id || github.event.inputs.run_id, github.event.client_payload.channel || github.event.inputs.channel || 'alpha', github.event_name) }}
+
 # Publishes the package(s) of one successful source-repo build run to a channel release in this repository.
 #
 # Started by:
@@ -34,6 +37,7 @@ on:
           - Zohaib8090/zohara-settings
           - Zohaib8090/zohara-apps
           - Zohaib8090/zohara-link
+          - Zohaib8090/zohara-agent
           - Zohaib8090/ZO-AI
           - Zohaib8090/zohara
       run_id:
